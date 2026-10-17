@@ -1,19 +1,19 @@
-# sdk/peritus-plugin-sdk/src — navigation
+# Native plugin SDK source — navigation
 
-Native Rust modules, shared SDK contracts, or maintainer assets. Feature code belongs in module crates.
+Data contracts and framing only. The module crate implements feature behavior; Peritus owns host-service authority.
 
-| File or folder | Role |
+| File | Responsibility |
 | --- | --- |
-| [canonical.rs](canonical.rs) | Local contract, source or documentation; inspect the file for exact behavior. |
-| [error.rs](error.rs) | Local contract, source or documentation; inspect the file for exact behavior. |
-| [framing.rs](framing.rs) | Local contract, source or documentation; inspect the file for exact behavior. |
-| [identity.rs](identity.rs) | Local contract, source or documentation; inspect the file for exact behavior. |
-| [lib.rs](lib.rs) | Public Rust API and supporting module exports. |
-| [manifest](manifest/AGENTS.md) | Local contract, source or documentation; inspect the file for exact behavior. |
-| [manifest.rs](manifest.rs) | Local contract, source or documentation; inspect the file for exact behavior. |
-| [module.rs](module.rs) | Local contract, source or documentation; inspect the file for exact behavior. |
-| [payload.rs](payload.rs) | Local contract, source or documentation; inspect the file for exact behavior. |
-| [protocol](protocol/AGENTS.md) | Local contract, source or documentation; inspect the file for exact behavior. |
-| [protocol.rs](protocol.rs) | Local contract, source or documentation; inspect the file for exact behavior. |
+| [lib.rs](lib.rs) | Public SDK exports. |
+| [canonical.rs](canonical.rs) | Stable canonical JSON encoding for identity and payload contracts. |
+| [error.rs](error.rs) | Typed SDK validation and protocol errors. |
+| [framing.rs](framing.rs) | Four-byte big-endian, length-bounded request/result frames. |
+| [identity.rs](identity.rs) | Plugin/request identifiers, numeric versions and manifest digests. |
+| [manifest.rs](manifest.rs) | Strict native/process manifest, capabilities, quotas and canonical identity. |
+| [module.rs](module.rs) | Generic native module actions, provider/function requests, menus and attachments. |
+| [payload.rs](payload.rs) | Bounded canonical JSON payload validation. |
+| [protocol.rs](protocol.rs) | Versioned initialization, invocation, cancellation, health and shutdown contracts. |
+| [manifest/](manifest/AGENTS.md) | Explicit manifest wire encoding. |
+| [protocol/](protocol/AGENTS.md) | Explicit request/result tagged wire encoding. |
 
-[Parent waypoint](../AGENTS.md).
+[Parent waypoint](../AGENTS.md). [Market contract](../../../CATALOG.md).

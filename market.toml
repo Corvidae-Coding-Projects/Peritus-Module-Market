@@ -7,5 +7,5 @@ name = "Deep Research"
 version = "1.0.0"
 description = "Native Rust plugin: approve a plan, gather original sources, challenge evidence, synthesize a report and independently fact-check it."
 path = "modules/deep-research"
-digest = "e6f1de46ccf298c01e3508e8cf5392fb3fb6129ca36d12a4574bc1678301ebaf"
+digest = "72ce67465575700bd73143ee0f0cfe1f202fb577074b438b5de541744407c209"
 tags = ["research", "sources", "fact-checking", "design"]

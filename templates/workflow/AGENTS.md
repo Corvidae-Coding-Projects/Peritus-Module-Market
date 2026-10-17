@@ -1,9 +1,9 @@
-# templates/workflow — navigation
+# Legacy workflow template — navigation
 
-Native Rust modules, shared SDK contracts, or maintainer assets. Feature code belongs in module crates.
+This retained data-only template declares roles and ordered stages interpreted by Peritus. Native Rust extensions should start from [rust-plugin](../rust-plugin/AGENTS.md).
 
-| File or folder | Role |
+| File | Role |
 | --- | --- |
-| [module.toml](module.toml) | Installable package metadata, artifact map and digest-bound resources. |
+| [module.toml](module.toml) | Example identity, role prompts, existing tools and explicit predecessor inputs; contains no executable entrypoint. |
 
 [Parent waypoint](../AGENTS.md).

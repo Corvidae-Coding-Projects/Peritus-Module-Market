@@ -7,6 +7,9 @@ compatible plugin does not require rebuilding Peritus.
 
 ## Use a module
 
+Requires a Peritus build with the native Rust module host (current `develop`).
+Earlier released binaries may not support the executable module manifest yet.
+
 In Peritus, open **Modules** in the browser or enter `/modules` in the terminal.
 Refresh the market, install a package, explicitly enable it, then select **Use module**.
 The plugin supplies its own action buttons, such as **Start research** and **View report**.
