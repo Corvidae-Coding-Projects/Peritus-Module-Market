@@ -1,0 +1,11 @@
+schema = 1
+name = "Peritus Module Market"
+
+[[modules]]
+id = "peritus.deep-research"
+name = "Deep Research"
+version = "1.0.0"
+description = "Approve a research plan, gather original sources, challenge the evidence, and receive a source-checked report with explicit unknowns."
+path = "modules/deep-research"
+digest = "57b022809183efd63d670b4c75a31e3b7972bd903bf000e4eb3ad5b5f8546827"
+tags = ["research", "sources", "fact-checking", "design"]
