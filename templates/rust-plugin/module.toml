@@ -1,0 +1,11 @@
+schema = 1
+id = "example.counter"
+version = "1.0.0"
+name = "Native Rust Counter"
+description = "Example executable Rust plugin with a direct command and a model-callable function."
+resources = ["bin/peritus-example-counter"]
+[code]
+abi = 1
+tools = []
+[code.artifacts]
+x86_64-unknown-linux-gnu = "bin/peritus-example-counter"

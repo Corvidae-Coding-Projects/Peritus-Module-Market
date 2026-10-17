@@ -1,0 +1,11 @@
+[package]
+name = "peritus-example-counter"
+version = "1.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+peritus-plugin-sdk = { path = "../../sdk/peritus-plugin-sdk" }
+serde_json.workspace = true

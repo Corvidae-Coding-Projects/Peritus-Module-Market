@@ -1,0 +1,29 @@
+//! Stable contracts for isolated Peritus plugins.
+//!
+//! The SDK contains data and framing only. It has no daemon handles, policy evaluator, filesystem
+//! access, process launcher, or authority-minting API.
+
+mod canonical;
+mod error;
+mod framing;
+mod identity;
+mod manifest;
+mod module;
+mod payload;
+mod protocol;
+
+pub use error::{SdkError, SdkErrorKind};
+pub use framing::{decode_frame, encode_frame};
+pub use identity::{ManifestDigest, PluginId, PluginVersion, RequestId};
+pub use manifest::{
+    CapabilityDeclaration, MANIFEST_VERSION, PluginEntrypoint, PluginKind, PluginManifest,
+    PluginOperation, PluginQuotas, ProtocolRange, SignatureDeclaration, TrustMaterial,
+};
+pub use module::{
+    ModuleAction, ModuleAgentRequest, ModuleAttachment, ModuleFunction, ModuleMenuAction,
+};
+pub use payload::{JsonBounds, JsonPayload};
+pub use protocol::{
+    FailureClass, HostRequest, InvocationContext, PROTOCOL_VERSION, PluginFailure,
+    PluginRequestEnvelope, PluginResponse, PluginResponseEnvelope, PluginRole, PluginStatus,
+};

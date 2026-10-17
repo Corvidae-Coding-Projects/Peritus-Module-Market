@@ -1,9 +1,9 @@
-# workflow — navigation
+# templates/workflow — navigation
 
-This repository contains declarative Peritus workflow packages and their discovery catalog. The Peritus host owns execution, permissions, model routing and durable state.
+Native Rust modules, shared SDK contracts, or maintainer assets. Feature code belongs in module crates.
 
-## Files and child areas
+| File or folder | Role |
+| --- | --- |
+| [module.toml](module.toml) | Installable package metadata, artifact map and digest-bound resources. |
 
-- [module.toml](module.toml): Versioned roles, tools and ordered stage dependencies.
-
-These maps add no testing or approval gates. Read the actual manifest/resources and host implementation for behavior.
+[Parent waypoint](../AGENTS.md).

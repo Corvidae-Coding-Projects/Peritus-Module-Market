@@ -1,9 +1,9 @@
-# resources — navigation
+# modules/deep-research/resources — navigation
 
-This repository contains declarative Peritus workflow packages and their discovery catalog. The Peritus host owns execution, permissions, model routing and durable state.
+Native Rust modules, shared SDK contracts, or maintainer assets. Feature code belongs in module crates.
 
-## Files and child areas
+| File or folder | Role |
+| --- | --- |
+| [source-policy.md](source-policy.md) | Local contract, source or documentation; inspect the file for exact behavior. |
 
-- [source-policy.md](source-policy.md): Claim-specific eligibility, provenance, independence and uncertainty policy.
-
-These maps add no testing or approval gates. Read the actual manifest/resources and host implementation for behavior.
+[Parent waypoint](../AGENTS.md).
