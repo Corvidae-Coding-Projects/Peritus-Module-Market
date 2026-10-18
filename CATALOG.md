@@ -49,6 +49,11 @@ workspace/web services; plugins can also implement new functionality in their ow
 functions. Native plugins have the ambient OS authority of the account running Peritus;
 the broker is not an OS sandbox.
 
+A successful plugin-defined tool result may include `request_complete: true` to yield
+immediately to its coordinator through `model_result` after its durable checkpoint. The
+coordinator still validates output; this is not a factual approval. Ordinary borrowed host
+web results cannot trigger this handoff.
+
 A module can return an artifact under its private state directory for explicit
 conversation/Design reuse. Peritus snapshots its exact bytes by digest and supplies
 paged `module_attachment_read`; attaching reference material never starts implementation.
@@ -57,3 +62,10 @@ Protocol frames, individual transfers, and short IPC calls have resource bounds.
 Agent continuations renew invocation segments while keeping saved memory; there is no
 new cumulative research token/time budget. Stop preserves plugin checkpoints; resume
 is an explicit plugin command and must respect any feature-specific approval gate.
+
+`ModuleAction::Checkpoint` publishes `{key,text,actions}` without ending the module.
+An updated host durably presents the text and menu before invoking `checkpoint_ack` with
+that exact key. The module owns the saved publication and the next step. Cancellation or
+new user input prevents acknowledgement. A crash between the two steps may replay the
+same checkpoint; the contract is at-least-once. This action requires a host implementing
+the updated SDK service. Existing Reply/Model modules keep their original behavior.

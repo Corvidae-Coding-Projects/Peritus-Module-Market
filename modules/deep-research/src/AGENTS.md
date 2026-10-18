@@ -5,8 +5,10 @@ Native Rust modules, shared SDK contracts, or maintainer assets. Feature code be
 | File or folder | Role |
 | --- | --- |
 | [coordinator.rs](coordinator.rs) | Research agent scheduling, command semantics, checkpoints and human plan approval. |
+| [coordinator/](coordinator/AGENTS.md) | Continuous-mode user controls and report publication acknowledgements. |
 | [definitions.rs](definitions.rs) | Plugin-defined agent tool schemas and guidance. |
 | [ledger.rs](ledger.rs) | Persistent source admission, report versions and fact-check bindings. |
+| [ledger/](ledger/AGENTS.md) | Paged inspection, durable reviewer progress and coverage repair. |
 | [lib.rs](lib.rs) | Public Rust API and supporting module exports. |
 | [main.rs](main.rs) | Native framed IPC executable entry point. |
 

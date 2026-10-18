@@ -4,8 +4,8 @@ name = "Peritus Module Market"
 [[modules]]
 id = "peritus.deep-research"
 name = "Deep Research"
-version = "1.0.0"
-description = "Native Rust plugin: approve a plan, gather original sources, challenge evidence, synthesize a report and independently fact-check it."
+version = "1.4.0"
+description = "Native Rust research: approve a plan, gather sources and controversies, assess evidence, publish checked reports, and optionally continue in steerable Sicko mode."
 path = "modules/deep-research"
-digest = "72ce67465575700bd73143ee0f0cfe1f202fb577074b438b5de541744407c209"
+digest = "bc47f1367b75158c1817b78d2aec7026da9a891e8673da82c5c0afb16092ed1a"
 tags = ["research", "sources", "fact-checking", "design"]

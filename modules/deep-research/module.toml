@@ -1,9 +1,9 @@
 schema = 1
 id = "peritus.deep-research"
-version = "1.0.0"
+version = "1.4.0"
 name = "Deep Research"
-description = "Native Rust plugin: approve a plan, gather original sources, challenge evidence, synthesize a report and independently fact-check it."
-resources = ["bin/x86_64-unknown-linux-gnu/peritus-deep-research", "resources/source-policy.md", "src/main.rs", "src/lib.rs", "src/coordinator.rs", "src/ledger.rs", "src/definitions.rs", "workflow.toml", "Cargo.toml"]
+description = "Native Rust research: approve a plan, gather sources and controversies, assess evidence, publish checked reports, and optionally continue in steerable Sicko mode."
+resources = ["bin/x86_64-unknown-linux-gnu/peritus-deep-research", "resources/source-policy.md", "src/main.rs", "src/lib.rs", "src/coordinator.rs", "src/coordinator/continuous.rs", "src/ledger.rs", "src/ledger/inspection.rs", "src/ledger/progress.rs", "src/ledger/inquiry.rs", "src/ledger/revision.rs", "src/definitions.rs", "workflow.toml", "Cargo.toml"]
 
 [code]
 abi = 1

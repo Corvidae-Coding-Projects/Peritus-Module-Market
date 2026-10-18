@@ -1,5 +1,11 @@
 //! Exact observed passages, claim-specific admission and version-bound report approval.
 use crate::{Error, digest, invalid, publish};
+
+mod inquiry;
+mod inspection;
+mod progress;
+mod revision;
+use inquiry::{Conclusion, InquiryRequirement, Provenance};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::{Value, json};
 use std::{
@@ -24,6 +30,8 @@ struct Plan {
     strategy: String,
     output: String,
     clarifications: Vec<Clarification>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    investigation: Vec<InquiryRequirement>,
 }
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -38,6 +46,8 @@ struct Passage {
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Candidate {
+    #[serde(default = "gather_stage", skip_serializing_if = "is_gather")]
+    origin_stage: String,
     question: usize,
     claim: String,
     relation: String,
@@ -63,6 +73,8 @@ struct Admission {
     independence: String,
     scope: String,
     limitations: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    provenance: Option<Provenance>,
 }
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -82,9 +94,13 @@ struct Disposition {
 struct Report {
     title: String,
     synthesis: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    controversies: String,
     findings: Vec<Finding>,
     questions: Vec<Disposition>,
     limitations: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    conclusions: Vec<Conclusion>,
 }
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -93,12 +109,16 @@ struct Review {
     approved: bool,
     reviewed: Vec<String>,
     corrections: Vec<String>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    inquiry_assessment: String,
 }
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Gap {
     question: usize,
     reason: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    attempts: Vec<String>,
 }
 
 /// Durable research ledger inside one exclusively owned module job.
@@ -189,6 +209,17 @@ impl Research {
     }
     /// Records an actual successful host web_open/web_read page, scoped to its reading role.
     pub fn observe(&self, stage: &str, value: &Value) -> Result<(), Error> {
+        if let (Some(query), Some(results)) = (value["query"].as_str(), value["results"].as_array())
+        {
+            if !self.approved()?
+                || !matches!(stage, "gather" | "controversies" | "assess" | "fact-check")
+            {
+                return Err(invalid("source discovery requires an approved research stage"));
+            }
+            let urls = results.iter().filter_map(|r| r["url"].as_str()).collect::<Vec<_>>();
+            self.record(&format!("searches/{stage}"), &json!({"query":query,"urls":urls}))?;
+            return Ok(());
+        }
         let (Some(source), Some(text), Some(url)) =
             (value["source"].as_str(), value["text"].as_str(), value["url"].as_str())
         else {
@@ -200,7 +231,7 @@ impl Research {
                 "no research source reads may be admitted before explicit approval of the saved plan",
             ));
         }
-        if !matches!(stage, "gather" | "assess" | "fact-check") {
+        if !matches!(stage, "gather" | "controversies" | "assess" | "fact-check") {
             return Err(invalid("web evidence is not allowed in this research stage"));
         }
         let title =
@@ -249,15 +280,37 @@ impl Research {
             return Err(invalid("quote must contain 1..16384 bytes of the exact observed text"));
         }
         let folder = format!("reads/{stage}/{source}");
+        let mut matches = std::collections::BTreeSet::new();
+        let mut range_read = false;
         for id in self.ids(&folder)? {
             let page: Passage = self.immutable(&folder, &id)?;
             if let Some(start) =
                 offset.checked_sub(page.offset).and_then(|n| usize::try_from(n).ok())
             {
+                range_read |= page.text.get(start..start.saturating_add(quote.len())).is_some();
                 if page.text.get(start..start.saturating_add(quote.len())) == Some(quote) {
                     return Ok(page);
                 }
             }
+            // Diagnose offsets using only passages this role already observed.
+            // Keep the error bounded even when an exact phrase occurs repeatedly.
+            for (start, _) in page.text.match_indices(quote).take(9) {
+                if matches.len() < 9 {
+                    if let Some(offset) = page.offset.checked_add(start as u64) {
+                        matches.insert(offset);
+                    }
+                }
+            }
+        }
+        if !matches.is_empty() {
+            return Err(invalid(format!(
+                "The exact quote is already read at UTF-8 byte offsets {matches:?}. Correct the supplied offset {offset}; another web_read is unnecessary. Offsets shown are bounded to nine matches.",
+            )));
+        }
+        if range_read {
+            return Err(invalid(
+                "This role already read the requested range, but the quote differs. Copy the exact observed text and its UTF-8 byte offset; rereading the same range is unnecessary.",
+            ));
         }
         Err(invalid(
             "This role has not read that exact source/range, or the quote differs. Use web_read on the original source and the exact UTF-8 offset before recording it.",
@@ -280,12 +333,23 @@ impl Research {
         if name == "research_inspect" {
             return self.inspect(stage, arguments);
         }
+        if name == "research_item" {
+            return self.item(stage, arguments);
+        }
         if stage != "plan" && !self.approved()? {
             return Err(invalid(
                 "research cannot gather, admit, synthesize or check before the human approves the saved plan",
             ));
         }
         match (stage, name) {
+            ("gather", "research_finish") => {
+                self.stage_output("gather")?;
+                Ok(json!({"saved":true,"request_complete":true}))
+            }
+            ("assess", "research_coverage") => self.save_coverage(arguments),
+            ("assess" | "fact-check", "research_inquiry") => self.save_inquiry(arguments),
+            ("assess" | "fact-check", "research_followup") => self.save_followup(stage, arguments),
+            ("fact-check", "research_check") => self.save_check(arguments),
             ("plan", "research_plan") => {
                 if self.read::<Value>("approved.json").is_ok() {
                     return Err(invalid(
@@ -304,6 +368,7 @@ impl Research {
                 for q in &plan.questions {
                     required(q)?;
                 }
+                Self::validate_requirements(&plan)?;
                 for q in &plan.clarifications {
                     required(&q.question)?;
                     for s in &q.suggestions {
@@ -312,11 +377,12 @@ impl Research {
                 }
                 self.save("plan.json", &plan)?;
                 Ok(
-                    json!({"saved":true,"plan_digest":self.plan_digest()?,"needs_clarification":!plan.clarifications.is_empty()}),
+                    json!({"saved":true,"plan_digest":self.plan_digest()?,"needs_clarification":!plan.clarifications.is_empty(),"request_complete":true}),
                 )
             }
-            ("gather", "research_candidate") => {
-                let item: Candidate = decode(arguments)?;
+            ("gather" | "controversies", "research_candidate") => {
+                let mut item: Candidate = decode(arguments)?;
+                item.origin_stage = stage.into();
                 self.question(item.question)?;
                 for s in [&item.claim, &item.publisher, &item.date, &item.chain, &item.limitations]
                 {
@@ -325,6 +391,8 @@ impl Research {
                 if !matches!(
                     item.category.as_str(),
                     "study"
+                        | "investigation"
+                        | "analysis"
                         | "dataset"
                         | "standard"
                         | "documentation"
@@ -335,16 +403,16 @@ impl Research {
                 {
                     return Err(invalid("invalid evidence category or relation"));
                 }
-                let passage = self.observed("gather", &item.source, item.offset, &item.quote)?;
+                let passage = self.observed(stage, &item.source, item.offset, &item.quote)?;
                 let id = self.record("candidates", &item)?;
                 Ok(
                     json!({"candidate":id,"url":passage.url,"state":"unassessed; unavailable to synthesis until admitted"}),
                 )
             }
-            ("gather", "research_gap") => {
+            ("gather" | "controversies", "research_gap") => {
                 let gap: Gap = decode(arguments)?;
                 self.question(gap.question)?;
-                required(&gap.reason)?;
+                self.checked_gap(&gap)?;
                 Ok(json!({"gap":self.record("gaps",&gap)?}))
             }
             ("assess", "research_admit") => {
@@ -366,14 +434,17 @@ impl Research {
                     return Err(invalid("decision must be admitted, qualified or rejected"));
                 }
                 if admission.decision != "rejected" {
+                    self.validate_provenance(&admission, &candidate)?;
                     if candidate.category == "discovery-only" {
                         return Err(invalid(
                             "blogs, SEO, aggregators, social and AI summaries are discovery-only and cannot support conclusions",
                         ));
                     }
-                    if candidate.category == "first-party" && admission.decision != "qualified" {
+                    if matches!(candidate.category.as_str(), "first-party" | "investigation")
+                        && admission.decision != "qualified"
+                    {
                         return Err(invalid(
-                            "first-party statements require qualified, explicitly attributed scope",
+                            "first-party statements and reported allegations require qualified, explicitly attributed scope",
                         ));
                     }
                     self.observed("assess", &candidate.source, candidate.offset, &candidate.quote)?;
@@ -385,23 +456,15 @@ impl Research {
                 )?;
                 Ok(json!({"admission":id,"decision":admission.decision}))
             }
-            ("write", "research_report") => {
-                let report: Report = decode(arguments)?;
-                self.validate_report(&report)?;
-                let id = self.record("reports", &report)?;
-                if let Ok(review) = self.current_review() {
-                    if !review.approved && review.report_digest == id {
-                        return Err(invalid(
-                            "this exact draft was rejected; change the disputed claims/qualifications or state the unresolved evidence gap",
-                        ));
-                    }
-                }
-                self.save("report.json", &json!({"digest":id}))?;
-                Ok(json!({"report_digest":id,"status":"draft; pending independent source check"}))
-            }
+            ("write", "research_report") => self.save_report(decode(arguments)?),
+            ("write", "research_report_revise") => self.revise_report(arguments),
             ("fact-check", "research_review") => {
                 let review: Review = decode(arguments)?;
                 let (id, report) = self.current_report()?;
+                required(&review.inquiry_assessment)?;
+                if review.approved {
+                    self.validate_report(&report)?;
+                }
                 if review.report_digest != id {
                     return Err(invalid("review must bind the exact current report_digest"));
                 }
@@ -413,9 +476,13 @@ impl Research {
                 }
                 let expected =
                     report.findings.iter().map(|f| f.admission.as_str()).collect::<BTreeSet<_>>();
-                if review.reviewed.iter().map(String::as_str).collect::<BTreeSet<_>>() != expected {
+                let checked = review.reviewed.iter().map(String::as_str).collect::<BTreeSet<_>>();
+                if checked.len() != review.reviewed.len()
+                    || !checked.is_subset(&expected)
+                    || (review.approved && checked != expected)
+                {
                     return Err(invalid(
-                        "reviewed must cover exactly every cited admission in the actual report",
+                        "Approval must review exactly every cited admission. An early rejection lists only actually checked cited admissions, without duplicates.",
                     ));
                 }
                 if review.approved && !review.corrections.is_empty()
@@ -426,6 +493,12 @@ impl Research {
                     ));
                 }
                 for reference in &review.reviewed {
+                    let check = self.check(&id, reference)?.ok_or_else(|| invalid(format!("Save research_check for citation {reference} before completing review; inspect progress for pending citations")))?;
+                    if review.approved && check["approved"] != true {
+                        return Err(invalid(
+                            "a failed citation check must be corrected before report approval",
+                        ));
+                    }
                     let admission = self.admission(reference)?;
                     let candidate = self.candidate(&admission.candidate)?;
                     self.observed(
@@ -440,7 +513,9 @@ impl Research {
                 }
                 let review_id = self.record("reviews", &review)?;
                 self.save("review.json", &json!({"digest":review_id}))?;
-                Ok(json!({"review":review_id,"report_digest":id,"approved":review.approved}))
+                Ok(
+                    json!({"review":review_id,"report_digest":id,"approved":review.approved,"request_complete":true}),
+                )
             }
             _ => Err(invalid("research operation is unavailable to this role")),
         }
@@ -460,7 +535,10 @@ impl Research {
     fn active_admissions(&self) -> Result<Vec<(String, Admission)>, Error> {
         let mut list = vec![];
         for candidate in self.ids("candidates")? {
-            let decision: Value = self.read(&format!("decisions/{candidate}.json"))?;
+            let Some(decision) = self.optional::<Value>(&format!("decisions/{candidate}.json"))?
+            else {
+                continue;
+            };
             let id = decision["admission"]
                 .as_str()
                 .ok_or_else(|| invalid("admission pointer is invalid"))?;
@@ -471,10 +549,20 @@ impl Research {
     fn validate_report(&self, report: &Report) -> Result<(), Error> {
         required(&report.title)?;
         required(&report.synthesis)?;
+        if report.controversies.trim().is_empty() {
+            return Err(invalid(
+                "Include the dedicated controversies field: present substantive accusations/criticisms, attribution, responses and documented outcomes. If not investigated or applicable, state that scope honestly; never invent a controversy.",
+            ));
+        }
+        if !self.coverage_current()? {
+            return Err(invalid(
+                "Current independent-inquiry coverage is required; reassess legacy or changed evidence before publishing a report",
+            ));
+        }
         let active = self
             .active_admissions()?
             .into_iter()
-            .filter(|(_, a)| a.decision != "rejected")
+            .filter(|(_, a)| a.decision != "rejected" && a.provenance.is_some())
             .map(|(id, _)| id)
             .collect::<BTreeSet<_>>();
         let mut found = BTreeSet::new();
@@ -490,26 +578,39 @@ impl Research {
             self.question(disposition.question)?;
             required(&disposition.explanation)?;
             if !questions.insert(disposition.question)
-                || !matches!(disposition.status.as_str(), "supported" | "contested" | "unknown")
+                || !matches!(
+                    disposition.status.as_str(),
+                    "supported" | "contested" | "partial" | "unknown"
+                )
             {
                 return Err(invalid(
-                    "question dispositions must be unique and supported, contested or unknown",
+                    "question dispositions must be unique and supported, contested, partial or unknown",
                 ));
             }
             let mut relations = BTreeSet::new();
             for finding in &report.findings {
                 let a = self.admission(&finding.admission)?;
                 let c = self.candidate(&a.candidate)?;
-                if c.question == disposition.question {
+                if c.question == disposition.question
+                    || report.conclusions.iter().any(|conclusion| {
+                        conclusion.question == disposition.question
+                            && (conclusion.supports.contains(&finding.admission)
+                                || conclusion.contradicts.contains(&finding.admission))
+                    })
+                {
                     relations.insert(c.relation);
                 }
             }
-            if disposition.status == "supported" && !relations.contains("supports")
-                || disposition.status == "contested"
-                    && !(relations.contains("supports") && relations.contains("contradicts"))
+            if disposition.status != "unknown" && relations.is_empty() {
+                return Err(invalid(
+                    "supported/contested means evidence addresses the question; cite an admitted finding for that question, or mark it unknown",
+                ));
+            }
+            if matches!(disposition.status.as_str(), "supported" | "contested")
+                && !self.question_answered(disposition.question)?
             {
                 return Err(invalid(
-                    "supported/contested questions require corresponding admitted evidence in this report",
+                    "Supported/contested requires substantive answers to every approved criterion. Mark investigated remaining gaps partial/unknown; qualified subject accounts cannot stand in for independent inquiry.",
                 ));
             }
         }
@@ -521,78 +622,15 @@ impl Research {
         for l in &report.limitations {
             required(l)?;
         }
+        self.validate_conclusions(report)?;
         Ok(())
-    }
-    /// Paged role-scoped ledger, including exact source pointers for independent rereading.
-    pub fn inspect(&self, stage: &str, args: &Value) -> Result<Value, Error> {
-        #[derive(Deserialize)]
-        #[serde(deny_unknown_fields)]
-        struct Request {
-            kind: String,
-            #[serde(default)]
-            offset: usize,
-            #[serde(default = "page_size")]
-            max_items: usize,
-        }
-        let request: Request = decode(args)?;
-        if request.kind == "plan" {
-            return Ok(
-                json!({"plan":self.plan()?,"digest":self.plan_digest()?,"approved":self.approved()?}),
-            );
-        }
-        if request.kind == "report" {
-            let (id, report) = self.current_report()?;
-            if stage == "fact-check" {
-                self.save(
-                    &format!("report-reads/fact-check-{id}.json"),
-                    &json!({"report_digest":id}),
-                )?;
-            }
-            return Ok(json!({"report_digest":id,"report":report}));
-        }
-        if request.kind == "review" {
-            return Ok(json!(self.current_review()?));
-        }
-        if request.kind == "admissions" {
-            let records = self
-                .active_admissions()?
-                .into_iter()
-                .filter(|(_, a)| stage != "write" || a.decision != "rejected")
-                .collect::<Vec<_>>();
-            let page=records.iter().skip(request.offset).take(request.max_items.clamp(1,32)).map(|(id,a)|Ok(json!({"admission":id,"assessment":a,"candidate":self.candidate(&a.candidate)?}))).collect::<Result<Vec<_>,Error>>()?;
-            return Ok(
-                json!({"records":page,"next_offset":(request.offset+page.len()<records.len()).then_some(request.offset+page.len())}),
-            );
-        }
-        if stage == "write" && !matches!(request.kind.as_str(), "gaps") {
-            return Err(invalid(
-                "synthesis may read only the plan, admitted evidence, gaps, draft and correction feedback",
-            ));
-        }
-        let folder = match request.kind.as_str() {
-            "candidates" => "candidates",
-            "gaps" => "gaps",
-            "sources" => "sources",
-            _ => {
-                return Err(invalid(
-                    "kind must be plan, candidates, admissions, gaps, sources, report or review",
-                ));
-            }
-        };
-        let ids = self.ids(folder)?;
-        let mut records = Vec::new();
-        for id in ids.iter().skip(request.offset).take(request.max_items.clamp(1, 32)) {
-            records.push(json!({"id":id,"record":if folder=="sources"{self.read::<Value>(&format!("sources/{id}.json"))?}else{self.immutable::<Value>(folder,id)?}}));
-        }
-        Ok(
-            json!({"records":records,"next_offset":(request.offset+records.len()<ids.len()).then_some(request.offset+records.len())}),
-        )
     }
     /// Validates a role's completed contract and provides the host-authored checkpoint artifact.
     pub fn stage_output(&self, stage: &str) -> Result<String, Error> {
         match stage {
             "plan" => self.plan_markdown(),
             "gather" => {
+                self.ensure_followup_addressed()?;
                 let mut covered = BTreeSet::new();
                 for id in self.ids("candidates")? {
                     covered.insert(self.candidate(&id)?.question);
@@ -613,9 +651,15 @@ impl Research {
                 ))
             }
             "assess" => {
-                Ok(serde_json::to_string(&self.inspect("write", &json!({"kind":"admissions"}))?)?)
+                if !self.coverage_current()? {
+                    return Err(invalid(
+                        "Save research_coverage from useful vetted evidence, with honest unresolved or deferred detail; unused candidates do not require assessment. Produce a draft before expanding the agenda.",
+                    ));
+                }
+                Ok(serde_json::to_string(&self.progress("assess")?)?)
             }
             "write" => {
+                self.validate_report(&self.current_report()?.1)?;
                 if self.corrections()?.is_some() {
                     return Err(invalid(
                         "submit a revised report that resolves or honestly qualifies the reviewer's corrections before finishing synthesis",
@@ -635,22 +679,90 @@ impl Research {
         }
     }
     fn save_report_markdown(&self, checked: bool) -> Result<String, Error> {
-        let text = self.report_markdown(checked)?;
         let (id, _) = self.current_report()?;
-        publish(
-            &self.file(&format!("reports/{id}-{}.md", if checked { "checked" } else { "draft" })),
-            text.as_bytes(),
-        )?;
+        let text = if checked
+            && self.optional::<Value>(&format!("reports/{id}-checkpoint.json"))?.is_some()
+        {
+            self.checked_report(&id)?
+        } else {
+            let text = self.report_markdown(checked)?;
+            publish(
+                &self.file(&format!(
+                    "reports/{id}-{}.md",
+                    if checked { "checked" } else { "draft" }
+                )),
+                text.as_bytes(),
+            )?;
+            if checked {
+                let review: Value = self.read("review.json")?;
+                self.save(&format!("reports/{id}-checkpoint.json"), &json!({"report_digest":id,"rendered_sha256":digest(text.as_bytes()),"review_digest":review["digest"]}))?;
+            }
+            text
+        };
+        if checked {
+            self.save("checked-report.json", &json!({"digest":id}))?;
+        }
         Ok(text)
+    }
+    /// Read an exact historical checked report without consulting newer draft/evidence state.
+    pub fn checked_report(&self, id: &str) -> Result<String, Error> {
+        check_id(id)?;
+        let checkpoint: Value = self.read(&format!("reports/{id}-checkpoint.json"))?;
+        let text = fs::read_to_string(self.file(&format!("reports/{id}-checked.md")))?;
+        let review: Review = self.immutable(
+            "reviews",
+            checkpoint["review_digest"]
+                .as_str()
+                .ok_or_else(|| invalid("checkpoint review identity missing"))?,
+        )?;
+        if checkpoint["report_digest"] != id
+            || checkpoint["rendered_sha256"] != digest(text.as_bytes())
+            || !review.approved
+            || review.report_digest != id
+        {
+            return Err(invalid("checked report artifact differs from its bound checkpoint"));
+        }
+        Ok(text)
+    }
+    /// Last completed report remains readable while later evidence/drafts evolve.
+    pub fn last_checked_report(&self) -> Result<Option<(String, String)>, Error> {
+        let Some(pointer) = self.optional::<Value>("checked-report.json")? else {
+            // Older package versions already have a valid exact-report review,
+            // but did not persist a separate historical-checkpoint pointer.
+            if self.review_approved().unwrap_or(false) {
+                self.save_report_markdown(true)?;
+                return self.last_checked_report();
+            }
+            return Ok(None);
+        };
+        let id =
+            pointer["digest"].as_str().ok_or_else(|| invalid("invalid checked report pointer"))?;
+        Ok(Some((id.into(), self.checked_report(id)?)))
     }
     /// Whether a current report has a digest-bound, complete final source check.
     pub fn review_approved(&self) -> Result<bool, Error> {
-        let (id, _) = self.current_report()?;
+        if self.optional::<Value>("report.json")?.is_none()
+            || self.optional::<Value>("review.json")?.is_none()
+        {
+            return Ok(false);
+        }
+        let (id, report) = self.current_report()?;
         let review = self.current_review()?;
-        Ok(review.approved && review.report_digest == id)
+        if report.controversies.is_empty()
+            || !review.approved
+            || review.report_digest != id
+            || review.inquiry_assessment.trim().is_empty()
+        {
+            return Ok(false);
+        }
+        self.validate_report(&report)?;
+        Ok(true)
     }
     /// Current reviewer corrections when they bind the current draft.
     pub fn corrections(&self) -> Result<Option<Value>, Error> {
+        if self.optional::<Value>("report.json")?.is_none() {
+            return Ok(None);
+        }
         let (id, _) = self.current_report()?;
         match self.current_review() {
             Ok(review) if review.report_digest == id && !review.approved => Ok(Some(json!(review))),
@@ -668,6 +780,14 @@ impl Research {
         );
         for (i, q) in plan.questions.iter().enumerate() {
             text.push_str(&format!("{}. {q}\n", i + 1));
+            let requirement = self.requirement(i + 1)?;
+            text.push_str(&format!(
+                "   Evidence need: {}\n",
+                serde_json::to_string(&requirement.evidence_need)?
+            ));
+            for (criterion, target) in requirement.criteria.iter().enumerate() {
+                text.push_str(&format!("   Answer criterion {}: {target}\n", criterion + 1));
+            }
         }
         for q in plan.clarifications {
             text.push_str(&format!(
@@ -679,32 +799,107 @@ impl Research {
         text.push_str(&format!("\nRevise with /module peritus.deep-research revise DETAILS. No sources are gathered until you approve this saved plan.\n\nPlan digest: {}\nStart research: /module peritus.deep-research start {}",self.plan_digest()?,self.plan_digest()?));
         Ok(text)
     }
+    /// Exact cited evidence is available separately from the concise primary report.
+    pub fn evidence_markdown(&self, index: usize) -> Result<String, Error> {
+        let (id, _) = self.current_report()?;
+        self.evidence_for_report(&id, index)
+    }
+    /// Finding numbers are interpreted against the exact referenced report version.
+    pub fn evidence_for_report(&self, id: &str, index: usize) -> Result<String, Error> {
+        let report: Report = self.immutable("reports", id)?;
+        let finding =
+            index.checked_sub(1).and_then(|i| report.findings.get(i)).ok_or_else(|| {
+                invalid("evidence number must identify a finding in the current report")
+            })?;
+        let a = self.admission(&finding.admission)?;
+        let c = self.candidate(&a.candidate)?;
+        let page = self.discovery_passage(&c)?;
+        let provenance = match &a.provenance {
+            Some(p) => format!("\nSource role: {}\nProvenance: {}\nDependencies: {}\n",p.label(),p.basis,p.dependencies.join("; ")),
+            None => "\nLegacy assessment: source relationships have not been reassessed under the current inquiry standard.\n".into(),
+        };
+        Ok(format!(
+            "# Evidence {index}\n\n{}\n\nAssessment: {}. Scope: {}. Limitations: {}\n\nRationale: {}\nAuthority: {}\nMethods: {}\nIndependence: {}\n\n[Source]({}) — {}; {}; chain {}\nSource {} bytes {}..{}; admission {}\n\n> {}\n\nInterpretation: {}\nReport digest: {id}\n",
+            a.claim,
+            a.decision,
+            a.scope,
+            a.limitations,
+            a.rationale,
+            a.authority,
+            a.methods,
+            a.independence,
+            page.url,
+            c.publisher,
+            a.period,
+            c.chain,
+            c.source,
+            c.offset,
+            c.offset + c.quote.len() as u64,
+            finding.admission,
+            c.quote.replace('\n', "\n> "),
+            format!("{}{provenance}", finding.interpretation)
+        ))
+    }
     /// Human-readable report with qualifications, source ranges and explicit unknowns.
     pub fn report_markdown(&self, checked: bool) -> Result<String, Error> {
         let (id, report) = self.current_report()?;
         if checked && !self.review_approved()? {
             return Err(invalid("current report has not passed its bound source check"));
         }
-        self.validate_report(&report)?;
+        let legacy = report.conclusions.is_empty() || report.controversies.is_empty();
+        if !legacy {
+            self.validate_report(&report)?;
+        }
         let mut text = format!(
             "# {}\n\n{}\n\n## Synthesis and interpretation\n\n{}\n",
             report.title,
             if checked {
                 "Source-checked report (AI assessment; limitations below)."
+            } else if legacy {
+                "LEGACY RESEARCH OUTPUT — current independent-inquiry assessment is incomplete; use reassess."
             } else {
                 "PARTIAL DRAFT — independent source check is incomplete."
             },
             report.synthesis
         );
-        for finding in report.findings {
+        if !report.controversies.is_empty() {
+            let section = report.controversies.trim_start();
+            let section = section
+                .lines()
+                .next()
+                .filter(|line| line.trim().eq_ignore_ascii_case("## Controversies and criticism"))
+                .map_or(section, |line| section[line.len()..].trim_start());
+            text.push_str(&format!("\n## Controversies and criticism\n\n{}\n", section));
+        }
+        text.push_str("\n## Sources\n");
+        for (index, finding) in report.findings.iter().enumerate() {
             let a = self.admission(&finding.admission)?;
             let c = self.candidate(&a.candidate)?;
-            let page = self.observed("gather", &c.source, c.offset, &c.quote)?;
-            text.push_str(&format!("\n## Finding\n\n{}\n\nQualification: {}. Scope: {}. Limitations: {}\n\n[Source]({}) · {} · period {} · evidence chain {}\nRetained source {} bytes {}..{}; admission {}\n\n> {}\n",a.claim,a.decision,a.scope,a.limitations,page.url,c.publisher,a.period,c.chain,c.source,c.offset,c.offset+c.quote.len()as u64,finding.admission,c.quote.replace('\n',"\n> ")));
-            if !finding.interpretation.trim().is_empty() {
-                text.push_str(&format!("\nInterpretation: {}\n", finding.interpretation));
+            let page = self.discovery_passage(&c)?;
+            let title = if !page.title.trim().is_empty() {
+                &page.title
+            } else if !c.publisher.trim().is_empty() {
+                &c.publisher
+            } else {
+                &page.url
+            };
+            text.push_str(&format!(
+                "\n{}. [{}]({}) — {}; {}.\n",
+                index + 1,
+                title
+                    .replace('\\', "\\\\")
+                    .replace('[', "\\[")
+                    .replace(']', "\\]")
+                    .replace(['\n', '\r'], " "),
+                page.url,
+                c.publisher,
+                c.date
+            ));
+            if let Some(p) = &a.provenance {
+                text.push_str(&format!("   Source role: {}.\n", p.label()));
             }
         }
+        text.push_str(&format!("\nExact passages, claim qualifications and assessment rationales are retained separately. Use `/module peritus.deep-research evidence {id} NUMBER` for a source above.\n"));
         let plan = self.plan()?;
         text.push_str("\n## Question coverage\n");
         for q in report.questions {
@@ -744,4 +939,11 @@ fn check_id(s: &str) -> Result<(), Error> {
 }
 fn decode<T: DeserializeOwned>(v: &Value) -> Result<T, Error> {
     Ok(serde_json::from_value(v.clone())?)
+}
+
+fn gather_stage() -> String {
+    "gather".into()
+}
+fn is_gather(stage: &str) -> bool {
+    stage == "gather"
 }
