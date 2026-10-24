@@ -3,7 +3,8 @@
 use crate::{Error, invalid, records::*};
 use peritus_plugin_sdk::{
     ModuleJobCancelRequest, ModuleJobLogRequest, ModuleJobReceipt, ModuleJobRequest,
-    ModuleJobStatusRequest, ScopedSourceAuthority, ScopedSourceEntry, ScopedSourceHandle,
+    ModuleJobStatusRequest, ModulePatchReceipt, ScopedSourceAuthority, ScopedSourceEntry,
+    ScopedSourceHandle, ScopedSourceVerification, ScopedSourceVerifyRequest,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -12,8 +13,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
-pub(crate) const STATE_SCHEMA: u16 = 5;
-pub(crate) const PHASE: u8 = 5;
+pub(crate) const STATE_SCHEMA: u16 = 6;
+pub(crate) const PHASE: u8 = 6;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -37,11 +38,91 @@ pub(crate) struct State {
     #[serde(default)]
     pub(crate) findings: Vec<FindingRecord>,
     #[serde(default)]
+    pub(crate) patches: Vec<PatchRecord>,
+    #[serde(default)]
+    pub(crate) patch_receipts: Vec<ModulePatchReceipt>,
+    #[serde(default)]
     pub(crate) reviews: Vec<ReviewRecord>,
     pub(crate) reports: Vec<ReportRecord>,
     pub(crate) pending: Option<PendingRequest>,
     #[serde(default)]
     pub(crate) investigation: InvestigationState,
+    #[serde(default)]
+    pub(crate) repair: RepairState,
+    #[serde(default)]
+    pub(crate) original_verification: Option<ScopedSourceVerification>,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum RepairStage {
+    #[default]
+    NotStarted,
+    Planning,
+    Replaying,
+    Reviewing,
+    VerifyingOriginal,
+    Complete,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum PatchCaseCategory {
+    Attack,
+    Legitimate,
+    Malformed,
+    Adjacent,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum PatchCaseState {
+    Planned,
+    Running,
+    Passed,
+    Failed,
+    Blocked,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct PatchCasePlan {
+    pub(crate) id: String,
+    pub(crate) category: PatchCaseCategory,
+    pub(crate) attacker_input: String,
+    pub(crate) expected_stdout_fragment: String,
+    pub(crate) state: PatchCaseState,
+    pub(crate) host_job_id: Option<String>,
+    pub(crate) evidence: Option<RecordId>,
+    pub(crate) detail: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct PatchPlan {
+    pub(crate) finding_id: String,
+    pub(crate) root_cause: String,
+    pub(crate) target_path: String,
+    pub(crate) expected_source_digest: String,
+    pub(crate) replacement: String,
+    pub(crate) prerequisites: Vec<String>,
+    pub(crate) dependencies: Vec<String>,
+    pub(crate) order: u32,
+    pub(crate) cases: Vec<PatchCasePlan>,
+    pub(crate) patch_digest: Option<String>,
+    pub(crate) diff_artifact: Option<String>,
+    pub(crate) diff_bytes: Option<Vec<u8>>,
+    pub(crate) review_id: Option<RecordId>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct RepairState {
+    pub(crate) stage: RepairStage,
+    pub(crate) round: u64,
+    pub(crate) plans: Vec<PatchPlan>,
+    pub(crate) active_finding: Option<String>,
+    pub(crate) feedback: String,
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
@@ -242,6 +323,10 @@ pub(crate) enum PendingRequest {
         key: String,
         request: ModuleJobCancelRequest,
     },
+    SourceVerify {
+        key: String,
+        request: ScopedSourceVerifyRequest,
+    },
 }
 
 const fn default_manifest_entries() -> u16 {
@@ -258,7 +343,8 @@ impl PendingRequest {
             | Self::JobSubmit { key, .. }
             | Self::JobPoll { key, .. }
             | Self::JobLog { key, .. }
-            | Self::JobCancel { key, .. } => key,
+            | Self::JobCancel { key, .. }
+            | Self::SourceVerify { key, .. } => key,
         }
     }
 }
@@ -289,10 +375,14 @@ impl Default for State {
             job_receipts: Vec::new(),
             job_evidence: Vec::new(),
             findings: Vec::new(),
+            patches: Vec::new(),
+            patch_receipts: Vec::new(),
             reviews: Vec::new(),
             reports: Vec::new(),
             pending: None,
             investigation: InvestigationState::default(),
+            repair: RepairState::default(),
+            original_verification: None,
         }
     }
 }
@@ -335,7 +425,7 @@ impl State {
                 .checked_add(1)
                 .ok_or_else(|| invalid("scope revision overflow"))?,
             source_label: handle.display_name.clone(),
-            attacker_model: "Phase 3 permits digest-pinned dependency preparation and literal input to host-owned contained proof adapters."
+            attacker_model: "The selected source authority permits digest-pinned dependency preparation and literal input only to host-owned contained proof adapters."
                 .into(),
             allowed_effects: vec![
                 "inert_source_capture".into(),
@@ -380,6 +470,8 @@ impl State {
         self.campaign.source_snapshot = Some(snapshot_id);
         self.campaign.state = CampaignState::Active;
         self.investigation = InvestigationState::default();
+        self.repair = RepairState::default();
+        self.original_verification = None;
         self.coverage = security_families()
             .into_iter()
             .enumerate()
@@ -395,7 +487,7 @@ impl State {
                 family: family.into(),
                 surface: "whole_application".into(),
                 state: CoverageState::Unexamined,
-                reason: "Phase 3 retained the source boundary; broad investigation has not begun."
+                reason: "The source boundary is retained; broad investigation has not begun."
                     .into(),
                 evidence: Vec::new(),
                 supersedes: None,
@@ -407,10 +499,10 @@ impl State {
 
 pub(crate) fn load(parameters: &serde_json::Value) -> Result<State, Error> {
     let path = state_path(parameters)?;
-    let state = match fs::read(&path) {
+    let mut state = match fs::read(&path) {
         Ok(bytes) => serde_json::from_slice(&bytes)?,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            migrate_phase_three(parameters)?
+            migrate_phase_five(parameters)?
         }
         Err(error) => return Err(error.into()),
     };
@@ -420,6 +512,7 @@ pub(crate) fn load(parameters: &serde_json::Value) -> Result<State, Error> {
             state.schema, state.phase
         )));
     }
+    state.module_version = env!("CARGO_PKG_VERSION").into();
     Ok(state)
 }
 
@@ -448,7 +541,27 @@ pub(crate) fn publish(path: &Path, value: &impl Serialize) -> Result<(), Error> 
 }
 
 fn state_path(parameters: &serde_json::Value) -> Result<PathBuf, Error> {
-    Ok(private_root(parameters)?.join("red-team-state-v5.json"))
+    Ok(private_root(parameters)?.join("red-team-state-v6.json"))
+}
+
+fn migrate_phase_five(parameters: &serde_json::Value) -> Result<State, Error> {
+    let legacy = private_root(parameters)?.join("red-team-state-v5.json");
+    match fs::read(legacy) {
+        Ok(bytes) => {
+            let mut state: State = serde_json::from_slice(&bytes)?;
+            if state.schema != 5 || state.phase != 5 {
+                return Err(invalid("unsupported Red Team Phase 5 state"));
+            }
+            state.schema = STATE_SCHEMA;
+            state.phase = PHASE;
+            state.module_version = env!("CARGO_PKG_VERSION").into();
+            Ok(state)
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            migrate_phase_three(parameters)
+        }
+        Err(error) => Err(error.into()),
+    }
 }
 
 fn migrate_phase_three(parameters: &serde_json::Value) -> Result<State, Error> {

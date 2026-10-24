@@ -1,7 +1,7 @@
 # Peritus Red Team — phased implementation plan
 
-Status: Phases 1–3 implemented and real-interface verified in local working trees; Phases 4–8
-have not begun.
+Status: Phases 1–8 implemented and real-interface verified; Red Team 0.2.0 is the bounded Linux
+source-publication candidate.
 
 Date: 2026-10-23.
 
@@ -522,6 +522,35 @@ original violation and legitimate behavior, and hand the user complete replayabl
 replay instructions, redactions, remaining limitations and unchanged-original proof. Covers R9, R17,
 A7, A13 and the delivery/fix portions of A3, A8 and A12.
 
+### Phase 6 implementation record — 2026-10-23
+
+Phase 6 implements an automatic fixer and separate patch reviewer over the retained Phase 5
+findings. The host validates each exact source preimage, materializes a fresh disposable target,
+constructs the diff itself, and executes attack, legitimate, malformed and adjacent cases through
+the bounded Linux adapter. Patch identities bind source, findings, prerequisites, order and
+dependencies. The module retains proposed, applied-to-copy, validated, failed and blocked states,
+then asks the host to reread the selected original before publishing Markdown, JSON, exact patch
+files and a machine-readable replay bundle. It never applies a patch to the selected checkout.
+
+The final installed-module campaign retained two confirmed disclosures, eight patched replay
+receipts, two independently accepted exact diffs, complete four-category matrices and an unchanged
+12-file original manifest. A client detached and reattached during repair; pause/resume with a
+pending host request and fresh-process continuation completed without losing or duplicating the
+work. A clean market checkout was discovered, source-built, installed, enabled, selected and
+launched through the ordinary module-store TUI. A separate WebUI replay proved that host-authored
+patches for CRLF and no-final-newline inputs pass `git apply --check` and reconstruct the exact
+replacement bytes. Unit tests and formal verification were not run.
+
+The bounded identities and limitations are retained in Project Peritus at
+`docs/testing/red-team-phase6-real-2026-10-23.md` and
+`docs/testing/red-team-phase6-evidence.json`. Strict Red Team package Clippy, focused Project
+compilation and optimized native builds pass; Project-wide strict Clippy remains blocked by the
+documented unrelated pre-existing lint backlog.
+
+Architect verdict: **ready for Phase 7** at the Phase 6 coverage boundary. This verdict is not a
+claim that the complete ordinary TUI and GUI journey, cross-platform execution or adversarial
+hardening is finished.
+
 ## Phase 7 — complete TUI and GUI product journey
 
 **Maturity:** Integration.
@@ -563,6 +592,40 @@ human interfaces, including reconnect and recovery, without exposing internal or
 **Handoff:** complete journey receipts, UI screenshots/transcripts, campaign/job/artifact identities,
 recovery observations, usability defects and unresolved platform limits. Covers R10, R12–R15, R17 and
 the integrated form of A1, A5, A8, A10, A11 and A13.
+
+### Phase 7 implementation record — 2026-10-24
+
+Phase 7 adds a generic exact-run module projection owned by the host rather than a Red Team-specific
+UI contract. Native-module replies now retain all actions, a bounded Markdown summary, concrete
+host-observed progress, and the exact user-selected attachment identity. Attachments are copied to a
+stable per-run export directory with name, byte count, SHA-256 and local path. Progress updates merge
+without erasing actions, summaries, or exports, and a different package digest cannot inherit stale
+controls.
+
+The TUI now navigates the full action array with Left/Right or Tab/BackTab and runs the selected
+action with Enter; numeric keys remain shortcuts rather than a nine-action ceiling. Its current-run
+view shows operation progress, selected command, durable summary and export identity. The WebUI
+polls the exact active run, renders the same summary as Markdown, exposes every action, and displays
+and copies the stable export path. Findings and exact diffs are explicit module commands shared by
+both clients.
+
+The final optimized Linux host and module binaries replayed a completed actual-provider campaign
+through the real TUI. The view retained 17 actions, reopened the same report after a graceful client
+and daemon restart, and exposed a 34,488-byte Markdown export whose visible digest matched the file.
+The actual WebUI separately opened a completed campaign, rendered all 17 controls and both unified
+diffs with their four-category replay outcomes, and exported a 339,829-byte JSON report to the
+visible path with matching SHA-256. Restarting both daemon and Web gateway preserved the same
+conversation, campaign projection and export rather than duplicating publication. The selected
+12-file application remained byte-for-byte unchanged. Source-build, capability-failure and
+interruption observations are retained with the final Project Peritus Phase 7 evidence record.
+
+Unit tests and formal verification were not run. The Red Team package passes strict Clippy; the
+focused Project packages compile and the WebUI passes its type and optimized production builds.
+Project-wide strict Clippy remains stopped by the documented pre-existing `peritus-modules` lint
+backlog; the new progress API's own lint was corrected.
+
+Architect verdict: **ready for Phase 8** at the Phase 7 integration boundary. This is a bounded
+Linux integration result, not a cross-platform execution or whole-application security claim.
 
 ## Phase 8 — adversarial hardening and source-publication readiness
 
@@ -612,6 +675,41 @@ then leave the source-only module ready for publication without overstating cove
 **Handoff:** final source revision, acceptance ledger, replay bundle, known limitations, supported Linux
 environment and publication candidate identities. Covers final replay of A1–A14 and R1–R17; it does not
 authorize publication or claim that every vulnerability class has been exhausted.
+
+### Phase 8 implementation record — 2026-10-24
+
+Phase 8 adds a saved MIT-licensed adversarial corpus for prompt injection, forged success, host-file,
+network, home-directory and credential-boundary attempts, deadline expiry, descendant cancellation,
+unrelated crashes, and memory, process and storage pressure. The integrated host rejected source
+traversal and out-of-scope symlinks, denied private or credential-bearing dependency preparation,
+cancelled work when live source authority was revoked, cleaned owned descendants, and did not relaunch
+an interrupted effect after host restart. Fresh-process state reopen succeeded, deliberately corrupted
+state failed closed, and restoring the exact valid bytes recovered the campaign.
+
+The first copied-brownfield campaign exposed a real coordinator contract defect: discovery encoded an
+argument vector and the host-owned canary path inside the field intended to contain one literal target
+argument. That made valid probes inconclusive and left repair with no confirmed findings. The source
+module now describes that boundary in both the role prompt and function schema and rejects encoded
+argv or a host canary path at admission. The replay used a disposable copy of the existing complex Rust
+browser repository, retained 31 bounded source observations, routed all 15 families while leaving
+cryptography explicitly unexamined without a suitable runtime adapter, and executed 14 hypotheses.
+It distinguished two confirmed disclosures from seven not-reproduced, four refuted, and one
+inconclusive result. Both confirmed cases produced host-constructed copy-only patches that passed
+attack, legitimate, malformed and adjacent-input replay plus independent review. The campaign
+published Markdown, JSON, two exact patches and a reproduction bundle while an independent 127-file
+byte-and-executable-mode comparison proved the selected original unchanged.
+
+The final hostile TUI replay passed 15 containment, lifecycle, preparation and recovery scenarios.
+The actual-provider brownfield replay also passed client reattachment during repair and pause/resume
+with a pending replay. The Phase 7 WebUI, restart and stable-export journey remains applicable to the
+unchanged generic projection path. Final source publication uses version 0.2.0, a clean source-only Git
+tree, a pinned catalog digest and an isolated host-owned build that installs disabled before explicit
+enablement. Unit tests and formal verification were not run.
+
+Architect verdict: **ready for bounded Linux source publication**. The acceptance ledger retains the
+exact A1–A14 observations and limits. Unsupported adapters, cryptographic runtime behavior, non-Linux
+execution and vulnerability classes not exercised by a trusted adapter remain explicit gaps; this is
+not a whole-application security certification.
 
 ## Implementation issue discipline
 

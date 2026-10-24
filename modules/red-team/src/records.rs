@@ -461,6 +461,12 @@ pub struct ReportRecord {
     pub markdown_artifact: String,
     /// Content-addressed structured JSON report artifact.
     pub json_artifact: String,
+    /// Content-addressed replay bundle, when the report includes Phase-six delivery artifacts.
+    #[serde(default)]
+    pub reproduction_bundle_artifact: Option<String>,
+    /// Content identities of exact unified-diff files in application order.
+    #[serde(default)]
+    pub patch_artifacts: Vec<String>,
     /// Explicit unresolved work and coverage limitations.
     pub limitations: Vec<String>,
     /// Prior report revision replaced by this one.

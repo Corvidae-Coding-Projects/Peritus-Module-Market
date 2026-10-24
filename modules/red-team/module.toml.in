@@ -1,10 +1,10 @@
-# Source-only Phase 5 template. The host replaces these tokens after a pinned successful build.
+# Source-only hardened template. The host replaces these tokens after a pinned successful build.
 # This file is deliberately not a runnable package manifest and is not listed in market.toml.
 schema = 1
 id = "peritus.red-team"
-version = "0.1.0"
+version = "0.2.0"
 name = "Red Team"
-description = "Authorized defensive source investigation with bounded discovery, contained probes, and independent skeptical adjudication."
+description = "Authorized defensive source investigation with bounded discovery, contained probes, copy-only fixes, replay, and independent review."
 resources = [
   "@EXECUTABLE@",
   "skills/red-team/SKILL.md",
@@ -13,6 +13,7 @@ resources = [
   "resources/phase2-state-v2.json",
   "resources/phase3-state-v3.json",
   "resources/phase5-state-v5.json",
+  "resources/phase6-state-v6.json",
   "corpus/LICENSE",
   "corpus/README.md",
   "corpus/known-disclosure/vulnerable.sh",
@@ -21,9 +22,17 @@ resources = [
   "corpus/unknown-diagnostic/safe.sh",
   "corpus/adversarial/forged-success.sh",
   "corpus/adversarial/crash.sh",
+  "corpus/adversarial/boundary.sh",
+  "corpus/adversarial/descendant.sh",
+  "corpus/adversarial/memory-pressure.sh",
+  "corpus/adversarial/process-pressure.sh",
+  "corpus/adversarial/prompt-injection.sh",
+  "corpus/adversarial/storage-pressure.sh",
+  "corpus/adversarial/timeout.sh",
   "src/main.rs",
   "src/lib.rs",
   "src/investigation.rs",
+  "src/repair.rs",
   "src/report.rs",
   "src/records.rs",
   "src/state.rs",

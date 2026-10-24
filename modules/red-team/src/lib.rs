@@ -1,7 +1,8 @@
-//! Phase 5 Red Team coordinator: bounded discovery, contained probes and skeptical adjudication.
+//! Hardened Red Team coordinator: investigation, copy-only repair, replay, and delivery.
 
 mod investigation;
 pub mod records;
+mod repair;
 mod report;
 mod state;
 
@@ -14,6 +15,7 @@ use peritus_plugin_sdk::{
     ModuleJobStream, ModuleMenuAction, ScopedSourceHandle, ScopedSourceManifestPage,
     ScopedSourceManifestRequest, ScopedSourceReadRequest, ScopedSourceReadResult,
     ScopedSourceRequest, ScopedSourceRevocation, ScopedSourceRevokeRequest,
+    ScopedSourceVerification,
 };
 use records::{
     CampaignState, EvidenceKind, EvidenceRecord, RECORD_SCHEMA_VERSION, RecordId, RecordKind,
@@ -22,8 +24,8 @@ use serde_json::{Value, json};
 use sha2::{Digest as _, Sha256};
 use state::{ObservationState, PendingRequest, SkeletonCheckpoint, SourceObservation, State};
 
-const CHECKPOINT_KEY: &str = "red-team-phase-5-investigation-v1";
-const COMPATIBILITY_KEY: &str = "red-team-phase-5-host-profile";
+const CHECKPOINT_KEY: &str = "red-team-phase-6-repair-v1";
+const COMPATIBILITY_KEY: &str = "red-team-phase-6-host-profile";
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -38,13 +40,23 @@ pub enum Error {
 /// Dispatches one host-owned native module operation.
 pub fn dispatch(method: &str, parameters: &Value) -> Result<Value, Error> {
     if method == "tool" {
-        return investigation::tool(parameters);
+        return if repair::owns_key(parameters) {
+            repair::tool(parameters)
+        } else {
+            investigation::tool(parameters)
+        };
     }
     let action = match method {
         "command" => command(parameters)?,
         "checkpoint_ack" => checkpoint_ack(parameters)?,
         "host_result" => host_result(parameters)?,
-        "model_result" => investigation::model_result(parameters)?,
+        "model_result" => {
+            if repair::owns_key(parameters) {
+                repair::model_result(parameters)?
+            } else {
+                investigation::model_result(parameters)?
+            }
+        }
         "observe" => reply(
             "Red Team roles have no ambient host tools. Source and execution evidence must pass through module-defined scoped-source and contained-job operations.",
             &profile(parameters),
@@ -69,10 +81,18 @@ fn command(parameters: &Value) -> Result<ModuleAction, Error> {
         return checkpoint(parameters, &host);
     }
     let mut state = state::load(parameters)?;
-    if let Some(pending) = state.pending.as_ref() {
-        if command == "resume" {
-            return resume_pending(pending);
-        }
+    if command == "pause" {
+        return investigation::pause(parameters, &mut state);
+    }
+    if let Some(direction) = command.strip_prefix("steer ") {
+        return investigation::steer(parameters, &mut state, direction);
+    }
+    if command == "resume"
+        && !matches!(state.investigation.stage, state::InvestigationStage::NotStarted)
+    {
+        return investigation::resume(parameters, &host, &mut state);
+    }
+    if state.pending.is_some() {
         return Ok(reply(
             "A retained host-service request is unfinished. Use resume to reissue that retained request; no new command was accepted.",
             &host,
@@ -83,32 +103,24 @@ fn command(parameters: &Value) -> Result<ModuleAction, Error> {
     if command == "start" {
         return investigation::start(parameters, &host, &mut state);
     }
-    if command == "pause" {
-        return investigation::pause(parameters, &mut state);
-    }
-    if command == "resume"
-        && !matches!(state.investigation.stage, state::InvestigationStage::NotStarted)
-    {
-        return investigation::resume(parameters, &host, &mut state);
-    }
-    if let Some(direction) = command.strip_prefix("steer ") {
-        return investigation::steer(parameters, &mut state, direction);
-    }
     if command.is_empty() || matches!(command, "status" | "resume") {
         return Ok(reply(status(&state), &host, actions(&state), None));
     }
     if command == "coverage" {
         return Ok(reply(coverage(&state), &host, actions(&state), None));
     }
-    if command == "report" || command == "report-json" {
-        let attachment = report::publish_report(
-            &state::private_root(parameters)?,
-            &mut state,
-            command == "report-json",
-        )?;
+    if command == "findings" {
+        return Ok(reply(findings(&state), &host, actions(&state), None));
+    }
+    if command == "patches" {
+        return Ok(reply(patches(&state), &host, actions(&state), None));
+    }
+    if matches!(command, "report" | "report-json" | "bundle") {
+        let attachment =
+            report::publish_report(&state::private_root(parameters)?, &mut state, command)?;
         state::save(parameters, &state)?;
         return Ok(reply(
-            "The current Phase 5 report was published from retained source observations, registered hypotheses, host-authored proof receipts and independent skeptical decisions. Pending work and every unexamined family remain explicit gaps.",
+            "The current bounded delivery was published from retained source observations, findings, host-authored original and patched replay receipts, exact diffs, independent reviews, and the original-workspace comparison. Pending work and every unexamined family remain explicit gaps.",
             &host,
             actions(&state),
             Some(attachment),
@@ -148,7 +160,7 @@ fn command(parameters: &Value) -> Result<ModuleAction, Error> {
         return cancel_job(parameters, &host, &mut state, command);
     }
     Ok(reply(
-        "Unknown Red Team Phase 5 command. Use start, status, pause, resume, steer DETAILS, scope, refresh, manifest, observe PATH [offset=N] [bytes=N], prepare HTTPS_URL sha256=DIGEST [bytes=N], probe PATH [input=LITERAL], jobs, job ID, job-log ID STREAM [offset=N] [bytes=N], job-cancel ID, coverage, report, report-json, revoke, compatibility, contract, or checkpoint.",
+        "Unknown Red Team command. Use start, status, pause, resume, steer DETAILS, scope, refresh, manifest, observe PATH [offset=N] [bytes=N], prepare HTTPS_URL sha256=DIGEST [bytes=N], probe PATH [input=LITERAL], jobs, job ID, job-log ID STREAM [offset=N] [bytes=N], job-cancel ID, coverage, findings, patches, report, report-json, bundle, revoke, compatibility, contract, or checkpoint.",
         &host,
         actions(&state),
         None,
@@ -562,6 +574,11 @@ pub(crate) fn resume_pending(pending: &PendingRequest) -> Result<ModuleAction, E
             "cancel",
             serde_json::to_value(request)?,
         ),
+        PendingRequest::SourceVerify { request, .. } => (
+            HOST_CAPABILITY_SCOPED_SOURCE,
+            "verify",
+            serde_json::to_value(request)?,
+        ),
     };
     Ok(ModuleAction::HostService {
         request: ModuleHostRequest {
@@ -601,6 +618,11 @@ fn host_result(parameters: &Value) -> Result<ModuleAction, Error> {
         ModuleHostOutcome::Success { output } => output,
         ModuleHostOutcome::Unsupported { detail } => {
             state.pending = None;
+            if result.key.starts_with("red-team-repair-") {
+                repair::host_failure(&mut state, &detail);
+                state::save(parameters, &state)?;
+                return repair::next(parameters, &host, &mut state);
+            }
             if result.key.starts_with("red-team-investigation-") {
                 investigation::host_failure(&mut state, &pending, &detail);
                 state::save(parameters, &state)?;
@@ -618,6 +640,11 @@ fn host_result(parameters: &Value) -> Result<ModuleAction, Error> {
         }
         ModuleHostOutcome::Rejected { code, detail } => {
             state.pending = None;
+            if result.key.starts_with("red-team-repair-") {
+                repair::host_failure(&mut state, &format!("host rejection {code}: {detail}"));
+                state::save(parameters, &state)?;
+                return repair::next(parameters, &host, &mut state);
+            }
             if result.key.starts_with("red-team-investigation-") {
                 investigation::host_failure(
                     &mut state,
@@ -639,6 +666,16 @@ fn host_result(parameters: &Value) -> Result<ModuleAction, Error> {
         }
         ModuleHostOutcome::Failed { code, detail, retryable_with_new_action } => {
             state.pending = None;
+            if result.key.starts_with("red-team-repair-") {
+                repair::host_failure(
+                    &mut state,
+                    &format!(
+                        "host failure {code}: {detail}; retryable={retryable_with_new_action}"
+                    ),
+                );
+                state::save(parameters, &state)?;
+                return repair::next(parameters, &host, &mut state);
+            }
             if result.key.starts_with("red-team-investigation-") {
                 investigation::host_failure(
                     &mut state,
@@ -750,6 +787,13 @@ fn host_result(parameters: &Value) -> Result<ModuleAction, Error> {
         }
         PendingRequest::JobSubmit { .. } => {
             let handle: ModuleJobHandle = serde_json::from_value(output)?;
+            if result.key.starts_with("red-team-repair-submit-") {
+                repair::job_submitted(&mut state, &handle.job_id);
+                state.pending = None;
+                let action = repair::poll_action(&mut state, handle.job_id)?;
+                state::save(parameters, &state)?;
+                return Ok(action);
+            }
             if result.key.starts_with("red-team-investigation-submit-") {
                 investigation::job_submitted(&mut state, &handle.job_id);
                 state.pending = None;
@@ -768,6 +812,17 @@ fn host_result(parameters: &Value) -> Result<ModuleAction, Error> {
         PendingRequest::JobPoll { .. } | PendingRequest::JobCancel { .. } => {
             let status: ModuleJobStatus = serde_json::from_value(output)?;
             admit_job_status(&mut state, &status)?;
+            if result.key.starts_with("red-team-repair-poll-") {
+                let terminal = repair::job_status(&mut state, &status)?;
+                state.pending = None;
+                if terminal {
+                    state::save(parameters, &state)?;
+                    return repair::next(parameters, &host, &mut state);
+                }
+                let action = repair::poll_action(&mut state, status.job_id)?;
+                state::save(parameters, &state)?;
+                return Ok(action);
+            }
             if result.key.starts_with("red-team-investigation-poll-") {
                 let terminal = investigation::job_status(&mut state, &status);
                 state.pending = None;
@@ -797,6 +852,19 @@ fn host_result(parameters: &Value) -> Result<ModuleAction, Error> {
                 content,
             )
         }
+        PendingRequest::SourceVerify { .. } => {
+            let verification: ScopedSourceVerification = serde_json::from_value(output)?;
+            repair::original_verified(&mut state, verification.clone());
+            format!(
+                "# Original-workspace byte verification\n\n- Starting snapshot: `{}`\n- Observed manifest: `{}`\n- Unchanged: {}\n- Changed paths: {}\n- Added paths: {}\n- Removed paths: {}",
+                verification.snapshot_digest,
+                verification.observed_manifest_digest,
+                verification.unchanged,
+                list_or_none(&verification.changed_paths),
+                list_or_none(&verification.added_paths),
+                list_or_none(&verification.removed_paths),
+            )
+        }
     };
     state.pending = None;
     state::save(parameters, &state)?;
@@ -808,7 +876,8 @@ fn pending_capability(pending: &PendingRequest) -> &'static str {
         PendingRequest::Capture { .. }
         | PendingRequest::Manifest { .. }
         | PendingRequest::Read { .. }
-        | PendingRequest::Revoke { .. } => HOST_CAPABILITY_SCOPED_SOURCE,
+        | PendingRequest::Revoke { .. }
+        | PendingRequest::SourceVerify { .. } => HOST_CAPABILITY_SCOPED_SOURCE,
         PendingRequest::JobSubmit { .. }
         | PendingRequest::JobPoll { .. }
         | PendingRequest::JobLog { .. }
@@ -1142,7 +1211,7 @@ fn checkpoint(
     state::save(parameters, &state)?;
     Ok(ModuleAction::Checkpoint {
         key: CHECKPOINT_KEY.into(),
-        text: "Red Team Phase 5 investigation checkpoint was written to private module state. It retains exact source observations, role stage, hypotheses, contained-job receipts, skeptical decisions, reuse measurements, and explicit gaps.".into(),
+        text: "Red Team checkpoint was written to private module state. It retains exact source observations, findings, copy-only patch plans, replay receipts, independent reviews, original-byte proof, reuse measurements, and explicit gaps.".into(),
         actions: actions(&state),
     })
 }
@@ -1153,14 +1222,14 @@ fn checkpoint_ack(parameters: &Value) -> Result<ModuleAction, Error> {
         .ok_or_else(|| invalid("checkpoint acknowledgement is missing key"))?;
     let mut state = state::load(parameters)?;
     let checkpoint =
-        state.checkpoint.as_mut().ok_or_else(|| invalid("no Phase 5 checkpoint is pending"))?;
+        state.checkpoint.as_mut().ok_or_else(|| invalid("no Red Team checkpoint is pending"))?;
     if key != CHECKPOINT_KEY || checkpoint.key != key {
         return Err(invalid("checkpoint acknowledgement key does not match retained state"));
     }
     checkpoint.acknowledged = true;
     state::save(parameters, &state)?;
     Ok(reply(
-        "Red Team Phase 5 checkpoint is durably acknowledged.",
+        "Red Team checkpoint is durably acknowledged.",
         &profile(parameters),
         actions(&state),
         None,
@@ -1183,11 +1252,12 @@ fn status(state: &State) -> String {
         .filter(|job| matches!(job.state, records::JobState::Queued | records::JobState::Running))
         .count();
     format!(
-        "# Red Team — Phase 5 investigation\n\n- Module: `peritus.red-team` {}\n- Durable schema: v{}\n- Campaign state: `{:?}`\n- Investigation stage: `{:?}`\n- Investigation paused: {}\n- Scope revision: `{}`\n- Source snapshot: `{}`\n- Manifest artifact: `{}`\n- Current source observations: {}\n- Invalidated source observations: {}\n- Retained hypotheses: {}\n- Retained probes: {}\n- Retained host-owned jobs: {}\n- Active host-owned jobs: {}\n- Trusted job receipts: {}\n- Skeptically adjudicated findings: {}\n- Security families unexamined: {}\n- Reused exact source reads: {}\n- Foundation checkpoint: {}\n\nThe source handle is revocable. Every model role receives the canonical skill directly. The Rust coordinator alone admits source observations, contained execution receipts and classifications; unsuccessful attempts do not establish safety.",
+        "# Red Team investigation and repair\n\n- Module: `peritus.red-team` {}\n- Durable schema: v{}\n- Campaign state: `{:?}`\n- Investigation stage: `{:?}`\n- Repair stage: `{:?}`\n- Paused: {}\n- Scope revision: `{}`\n- Source snapshot: `{}`\n- Manifest artifact: `{}`\n- Current source observations: {}\n- Invalidated source observations: {}\n- Retained hypotheses: {}\n- Retained probes: {}\n- Retained host-owned jobs: {}\n- Active host-owned jobs: {}\n- Trusted job receipts: {}\n- Skeptically adjudicated findings: {}\n- Patch revisions: {}\n- Patch replay receipts: {}\n- Original workspace unchanged: {}\n- Security families unexamined: {}\n- Reused exact source reads: {}\n- Foundation checkpoint: {}\n\nThe source handle is revocable. Every model role receives the canonical skill directly. The Rust coordinator alone admits source observations, host-authored original and patched execution receipts, classifications, patch states, and before/after proof; unsuccessful attempts do not establish safety.",
         state.module_version,
         state.schema,
         state.campaign.state,
         state.investigation.stage,
+        state.repair.stage,
         state.investigation.paused,
         scope.map_or("not selected", |record| record.id.value.as_str()),
         snapshot.map_or("not captured", |record| record.snapshot_digest.as_str()),
@@ -1200,6 +1270,9 @@ fn status(state: &State) -> String {
         active_jobs,
         state.job_receipts.len(),
         state.findings.len(),
+        state.patches.len(),
+        state.patch_receipts.len(),
+        state.original_verification.as_ref().is_some_and(|proof| proof.unchanged),
         state
             .coverage
             .iter()
@@ -1224,9 +1297,73 @@ fn coverage(state: &State) -> String {
     text
 }
 
+fn findings(state: &State) -> String {
+    let mut text = "# Red Team findings\n\nClassifications describe the retained evidence boundary; they are not vulnerability-severity or whole-project safety claims.\n\n".to_owned();
+    if state.findings.is_empty() {
+        text.push_str("No finding has been independently adjudicated yet.\n");
+        return text;
+    }
+    for finding in &state.findings {
+        let hypothesis =
+            state.hypotheses.iter().find(|hypothesis| hypothesis.id.value == finding.hypothesis_id);
+        text.push_str(&format!(
+            "## `{}` — `{:?}`\n\n- Hypothesis: `{}`\n- Entry point: {}\n- Security property: {}\n- Evidence records: {}\n- Independent review: `{}`\n- Supersedes: `{}`\n\n",
+            finding.id.value,
+            finding.classification,
+            finding.hypothesis_id,
+            hypothesis.map_or("unavailable", |value| value.entry_point.as_str()),
+            hypothesis.map_or("unavailable", |value| value.security_property.as_str()),
+            finding.evidence.len(),
+            finding.review.as_ref().map_or("none", |value| value.value.as_str()),
+            finding.supersedes.as_ref().map_or("none", |value| value.value.as_str()),
+        ));
+    }
+    text
+}
+
+fn patches(state: &State) -> String {
+    let mut text = "# Red Team copy-only patches and diffs\n\nEvery state below is bounded to its recorded replay matrix. No patch was applied to the selected original workspace.\n\n".to_owned();
+    if state.repair.plans.is_empty() {
+        text.push_str("No patch plan has been retained yet.\n");
+        return text;
+    }
+    for plan in &state.repair.plans {
+        let lifecycle = state
+            .patches
+            .iter()
+            .rev()
+            .find(|patch| plan.diff_artifact.as_ref() == Some(&patch.diff_artifact))
+            .map(|patch| format!("{:?}", patch.state))
+            .unwrap_or_else(|| "Proposed".into());
+        text.push_str(&format!(
+            "## Finding `{}` · order {}\n\n- State: `{lifecycle}`\n- Target: `{}`\n- Root cause: {}\n- Expected preimage: `{}`\n- Patch identity: `{}`\n- Diff artifact: `{}`\n- Review: `{}`\n\n",
+            plan.finding_id,
+            plan.order,
+            plan.target_path,
+            plan.root_cause,
+            plan.expected_source_digest,
+            plan.patch_digest.as_deref().unwrap_or("not materialized"),
+            plan.diff_artifact.as_deref().unwrap_or("not materialized"),
+            plan.review_id.as_ref().map_or("none", |value| value.value.as_str()),
+        ));
+        for case in &plan.cases {
+            text.push_str(&format!(
+                "- `{}` / `{:?}` — `{:?}` — {}\n",
+                case.id, case.category, case.state, case.detail
+            ));
+        }
+        if let Some(diff) = &plan.diff_bytes {
+            text.push_str("\n```diff\n");
+            text.push_str(&String::from_utf8_lossy(diff).replace("```", "` ` `"));
+            text.push_str("```\n\n");
+        }
+    }
+    text
+}
+
 fn contract(profile: &Option<ModuleHostProfile>) -> Result<ModuleAction, Error> {
     Ok(reply(
-        "# Red Team Phase 5 contract\n\nThe host binds source capture to the explicitly opened Peritus workspace, then admits only stable job adapters over an exact source handle and revision. The coordinator performs one bounded inventory, delivers the canonical skill to separately persisted discovery and skeptic contexts, registers hypotheses before execution, and routes all effects through revocable scoped-source or host-owned job services. Dependency preparation accepts only declared HTTPS DNS origins on port 443, pins public DNS answers, independently revalidates bounded redirects, sends no credentials, applies a byte ceiling, and requires an exact SHA-256 before content-addressed publication. The canary-disclosure adapter launches the immutable selected target through the native Linux private-filesystem backend with cleared environment, no secrets, deny-all network, finite CPU/memory/process/storage/wall/output limits and complete process-tree ownership. The host generates and compares the canary; target output cannot manufacture a trusted receipt. A confirmed finding requires that receipt. Refuted, not-reproduced, inconclusive and blocked remain distinct. Phase five never develops or applies a patch.",
+        "# Red Team host contract\n\nThe host binds source capture to the explicitly opened Peritus workspace, then admits only stable job adapters over an exact source handle and revision. The coordinator performs one bounded inventory, delivers the canonical skill to separately persisted discovery, skeptic, fixer, and patch-reviewer contexts, registers hypotheses before execution, and routes all effects through revocable scoped-source or host-owned job services. The host-generated canary and evaluator remain outside target control. For confirmed findings, a fixer may propose an exact-preimage replacement, but the host alone constructs the unified diff and materializes it in disposable private job storage. Attack, legitimate, malformed and adjacent cases must preserve declared positive behavior while the violation is absent. An independent reviewer sees the exact diff and raw receipts. Final verification rereads the selected original workspace against the starting path, byte, and executable-bit manifest. TUI and GUI consume the same exact-run actions, concrete progress, durable summaries and user-selected export identity. The module exports Markdown, JSON, exact patches and a replay bundle; it cannot edit, commit, push, deploy or disclose the original project.",
         profile,
         base_actions(),
         None,
@@ -1265,7 +1402,7 @@ fn compatibility_text(profile: &ModuleHostProfile) -> String {
     .filter(|name| !profile.supports(name, 1))
     .collect::<Vec<_>>();
     format!(
-        "# Red Team host compatibility\n\nScoped source: **{source}**.\n\nContained proof jobs: **{jobs}**.\n\nAvailable v1 capabilities: {}.\n\nMissing Phase 5 runtime capabilities: {}.\n\nSource-build capability is used by the module market before installation, not by a running investigation. Missing capabilities do not cause ambient filesystem, process or network fallback.",
+        "# Red Team host compatibility\n\nScoped source: **{source}**.\n\nContained proof and copy-only replay jobs: **{jobs}**.\n\nAvailable v1 capabilities: {}.\n\nMissing required runtime capabilities: {}.\n\nSource-build capability is used by the module market before installation, not by a running investigation. Missing capabilities do not cause ambient filesystem, process or network fallback.",
         capability_names(profile).join(", "),
         list_or_none(&required),
     )

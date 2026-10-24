@@ -240,11 +240,7 @@ pub(crate) fn next(
         InvestigationStage::Discovery => model(state, "discovery"),
         InvestigationStage::Probing => schedule_probe(parameters, profile, state),
         InvestigationStage::Skeptic => model(state, "skeptic"),
-        InvestigationStage::Complete => Ok(reply(
-            "Phase-five investigation is complete for the bounded recorded hypotheses. Use report or report-json for the evidence-backed result; coverage gaps remain explicit.",
-            profile,
-            actions(state),
-        )),
+        InvestigationStage::Complete => crate::repair::start(parameters, profile, state),
     }
 }
 
@@ -258,7 +254,7 @@ fn model(state: &State, role: &str) -> Result<ModuleAction, Error> {
         "discovery" => (
             "writer",
             "Red Team · hypothesis discovery",
-            "Inspect the committed inventory and retained hypothesis index exactly once, then commit missing small falsifiable hypotheses with red_team_discovery_commit in batches of at most six. Set complete=false while another batch remains and complete=true on the final batch. Every accepted batch ends the provider request and is durable before the next fresh turn, so on recovery add only missing work. The inventory view is already compact and authoritative; do not request coverage or source again unless one specific missing fact is necessary. Do not rediscover the repository or reread an unchanged range within this role. Distinguish known-description reproduction from unknown discovery. Every executable probe must name an immutable target path, literal attacker input, and changed dimension. Prefer the transactional batch commit over one-at-a-time registration.",
+            "Inspect the committed inventory and retained hypothesis index exactly once, then commit missing small falsifiable hypotheses with red_team_discovery_commit in batches of at most six. Set complete=false while another batch remains and complete=true on the final batch. Every accepted batch ends the provider request and is durable before the next fresh turn, so on recovery add only missing work. The inventory view is already compact and authoritative; do not request coverage or source again unless one specific missing fact is necessary. Do not rediscover the repository or reread an unchanged range within this role. Distinguish known-description reproduction from unknown discovery. Every executable probe must name an immutable target path, literal attacker input, and changed dimension. `attacker_input` is exactly one opaque second argument passed to the target; the host supplies the hidden canary path as the first argument. Never encode argv, JSON, a shell command, or the host canary path in `attacker_input`. Prefer the transactional batch commit over one-at-a-time registration.",
         ),
         "skeptic" => (
             "reviewer",
@@ -373,7 +369,7 @@ fn function(name: &str, description: &str, schema: Value) -> ModuleFunction {
 }
 
 fn hypothesis_schema() -> Value {
-    json!({"type":"object","additionalProperties":false,"properties":{"family":{"type":"string","minLength":1,"maxLength":128},"origin":{"type":"string","enum":["known_description","unknown_discovery"]},"attacker":{"type":"string","minLength":1,"maxLength":4096},"entry_point":{"type":"string","minLength":1,"maxLength":4096},"prerequisites":{"type":"array","maxItems":64,"items":{"type":"string","minLength":1,"maxLength":4096}},"security_property":{"type":"string","minLength":1,"maxLength":4096},"falsifiable_observation":{"type":"string","minLength":1,"maxLength":4096},"source_evidence":{"type":"array","minItems":1,"maxItems":128,"items":{"type":"string","minLength":1,"maxLength":128}},"target_path":{"type":["string","null"],"maxLength":4096},"attacker_input":{"type":["string","null"],"maxLength":16384},"changed_dimension":{"type":"string","minLength":1,"maxLength":4096}},"required":["family","origin","attacker","entry_point","prerequisites","security_property","falsifiable_observation","source_evidence","target_path","attacker_input","changed_dimension"]})
+    json!({"type":"object","additionalProperties":false,"properties":{"family":{"type":"string","minLength":1,"maxLength":128},"origin":{"type":"string","enum":["known_description","unknown_discovery"]},"attacker":{"type":"string","minLength":1,"maxLength":4096},"entry_point":{"type":"string","minLength":1,"maxLength":4096},"prerequisites":{"type":"array","maxItems":64,"items":{"type":"string","minLength":1,"maxLength":4096}},"security_property":{"type":"string","minLength":1,"maxLength":4096},"falsifiable_observation":{"type":"string","minLength":1,"maxLength":4096},"source_evidence":{"type":"array","minItems":1,"maxItems":128,"items":{"type":"string","minLength":1,"maxLength":128}},"target_path":{"type":["string","null"],"maxLength":4096},"attacker_input":{"type":["string","null"],"maxLength":16384,"description":"Exact single opaque second argument for the target, for example read. The host separately provides the hidden canary path as argv[1]. Never encode argv, JSON, shell syntax, or a host path here."},"changed_dimension":{"type":"string","minLength":1,"maxLength":4096}},"required":["family","origin","attacker","entry_point","prerequisites","security_property","falsifiable_observation","source_evidence","target_path","attacker_input","changed_dimension"]})
 }
 
 fn adjudication_schema() -> Value {
@@ -780,6 +776,17 @@ fn register_hypothesis(state: &mut State, arguments: &Value) -> Result<Value, Er
     }
     if input.target_path.is_some() != input.attacker_input.is_some() {
         return Err(invalid("target_path and attacker_input must both be present or both be null"));
+    }
+    if let Some(value) = &input.attacker_input {
+        let normalized = value.trim().to_ascii_lowercase();
+        if normalized.starts_with("argv:")
+            || normalized.starts_with("argv=")
+            || value.contains("/tmp/peritus-owned/")
+        {
+            return Err(invalid(
+                "attacker_input must be the exact single literal passed after the host-owned canary path; do not encode argv or name the canary path",
+            ));
+        }
     }
     if let Some(path) = &input.target_path
         && !state.investigation.manifest_entries.iter().any(|entry| entry.path == *path)
@@ -1380,7 +1387,15 @@ pub(crate) fn actions(state: &State) -> Vec<ModuleMenuAction> {
         InvestigationStage::NotStarted => {
             actions.push(action("Start investigation", "start", true))
         }
-        InvestigationStage::Complete => {}
+        InvestigationStage::Complete
+            if state.repair.stage == crate::state::RepairStage::Complete => {}
+        InvestigationStage::Complete if state.investigation.paused => {
+            actions.push(action("Resume repair", "resume", true))
+        }
+        InvestigationStage::Complete => {
+            actions.push(action("Pause repair", "pause", true));
+            actions.push(action("Steer repair", "steer ", false));
+        }
         _ if state.investigation.paused => {
             actions.push(action("Resume investigation", "resume", true))
         }
@@ -1391,7 +1406,11 @@ pub(crate) fn actions(state: &State) -> Vec<ModuleMenuAction> {
     }
     actions.extend([
         action("Coverage ledger", "coverage", true),
-        action("Report now", "report", true),
+        action("Findings", "findings", true),
+        action("Patches and exact diffs", "patches", true),
+        action("Export partial Markdown report", "report", true),
+        action("Export partial JSON report", "report-json", true),
+        action("Export replay bundle", "bundle", true),
         action("Contained jobs", "jobs", true),
     ]);
     actions
