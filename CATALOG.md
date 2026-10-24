@@ -69,3 +69,42 @@ that exact key. The module owns the saved publication and the next step. Cancell
 new user input prevents acknowledgement. A crash between the two steps may replay the
 same checkpoint; the contract is at-least-once. This action requires a host implementing
 the updated SDK service. Existing Reply/Model modules keep their original behavior.
+
+## Versioned host services
+
+Updated hosts add `host_profile` to each method's `params_json`. It has schema one and an additive
+list of `{name, version}` capabilities. `ModuleAction::HostService` carries a durable request key,
+capability, exact version, operation, and structured input. The host rechecks current authority and
+returns a typed result through `host_result`. `unsupported` means the capability/version/operation is
+not implemented and must not be retried as though it were transient.
+
+The current profile advertises capability inspection plus the already implemented private-state,
+checkpoint, model, attachment, `module.scoped-source`, and Linux `module.owned-jobs` paths. Scoped source version 1 binds
+capture to the explicit opened workspace source, rejects unsafe paths and links, stores immutable
+content by digest, and returns revocable opaque handles for manifest and range reads. SDK contracts
+`module.owned-jobs@1` provides asynchronous submit, poll, paged log, and cancel operations for
+host-selected stable adapters. The first proof adapter runs selected source through the private
+Linux backend with cleared environment, deny-all network and secrets, bounded resources, a hidden
+host canary, and host-authored receipts. Its separate preparation adapter permits only declared,
+digest-pinned HTTPS retrieval through public addresses without credentials and disconnects before
+proof. `module.source-build@1` is now advertised on Linux as an inspection-only service for the
+running installed module. Build and install authority stays in the host-owned market action; module
+code cannot invoke or retry its own compiler. Possessing or serializing any request, handle, job,
+or package identity is not authority. Older Reply/Model/Checkpoint modules ignore the additive
+input and continue unchanged.
+
+## Source packages
+
+`sources.toml` is an additive schema-one source inventory. Legacy clients continue parsing only
+`market.toml`; current clients atomically retain both catalogs at one exact commit. A source entry
+pins its canonical tree digest, `Cargo.lock` digest, rustup toolchain, target, Cargo package,
+executable, manifest template, and closed recipe identifier. Refresh remains inert.
+
+An explicit Build and install action revalidates the clean commit and all pinned identities,
+prepares checksum-bearing crates.io dependencies in a private credential-free cache, and compiles
+offline in a bounded Linux systemd/Bubblewrap scope. The host then renders the package manifest,
+binds every declared resource and executable byte, and atomically installs the immutable package
+outside the repository in the disabled state. Source, archive, recipe, executable, and final
+package identities remain distinct in the retained build receipt. Cancellation, failure, or host
+loss never publishes partial output or replaces the previously selected package. Retrying is an
+explicit new attempt.

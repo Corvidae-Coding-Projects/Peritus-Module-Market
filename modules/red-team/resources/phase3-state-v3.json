@@ -1,0 +1,28 @@
+{
+  "schema": 3,
+  "phase": 3,
+  "module_version": "0.1.0",
+  "checkpoint": null,
+  "campaign": {
+    "schema": 1,
+    "id": {
+      "schema": 1,
+      "kind": "campaign",
+      "value": "campaign-main"
+    },
+    "state": "draft",
+    "scope_revision": null,
+    "source_snapshot": null,
+    "supersedes": null
+  },
+  "scopes": [],
+  "snapshots": [],
+  "coverage": [],
+  "hypotheses": [],
+  "observations": [],
+  "jobs": [],
+  "job_receipts": [],
+  "job_evidence": [],
+  "reports": [],
+  "pending": null
+}

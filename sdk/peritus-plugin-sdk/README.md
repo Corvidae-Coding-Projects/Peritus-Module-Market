@@ -20,3 +20,10 @@ key, allowing continuing work with visible results. Cancellation/new steering pr
 acknowledgement. A crash between publication and acknowledgement can replay the same
 checkpoint. Plugins using this additive service require a host that implements it; old
 Reply/Model plugins continue unchanged.
+
+The version-one module-host contract adds an additive `host_profile` to every workflow call and
+`ModuleAction::HostService`. The profile lists only services the running host actually supports.
+The request is returned through `host_result` as success, unsupported, rejected, or failed; a missing
+service never grants permission to improvise an ambient filesystem or process path. The SDK defines
+future scoped-source, owned-job, and source-build identities, but their constants and data types do
+not claim that the current host implements those services.

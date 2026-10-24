@@ -17,20 +17,29 @@ Installation never runs code; selecting an enabled native module launches its ex
 Native code runs as your OS account. Agent access to host tools follows live permissions.
 
 The CLI also supports `peritus modules refresh`, `market`, `install-market ID DIGEST`,
-`install DIRECTORY`, `enable ID`, `disable ID`, `show ID`, and `remove ID`.
-Fetches use immutable Git commits and verify the complete declared package digest.
-Updates install disabled; existing saved job bytes remain retained.
+`build-install-market ID SOURCE_DIGEST`, `install DIRECTORY`, `enable ID`, `disable ID`,
+`show ID`, and `remove ID`. Fetches use immutable Git commits and verify the complete
+declared package or source identity. Updates install disabled; existing saved job bytes
+remain retained.
 
 ## Available modules
 
 | Module | Code and function |
 | --- | --- |
 | [Deep Research](modules/deep-research/) | Native Rust planner, gatherer, skeptical source admission, synthesis, final fact-checking, persistent evidence ledger, and report generation. |
+| [Red Team](modules/red-team/) | Source-built Rust foundation for explicit scoped source, retained evidence, contained proof jobs, and authorized defensive investigation. |
 
-The initial prebuilt artifact targets **Linux x86-64 GNU**. The Rust source and IPC
-contract support native platform builds; macOS, Windows, and other architectures
-need their own compiled artifact declared in `[code.artifacts]`. Those platforms
-are not claimed tested by a Linux run.
+Red Team is deliberately absent from the legacy executable `market.toml`; no generated binary is
+committed. Current Linux hosts discover it through the additive `sources.toml`, show **Build and
+install**, and compile only after that explicit action. The host pins the clean catalog commit,
+source tree, lockfile, toolchain, target, and fixed recipe. Preparation is credential-free;
+compilation is offline and bounded; only a fully validated package is atomically installed outside
+Git, disabled. Failure or interruption leaves any prior installation selected and usable.
+
+The initial prebuilt artifact and source-build recipe target **Linux x86-64 GNU**. The Rust
+source and IPC contract support native platform builds; macOS, Windows, and other architectures
+need their own compiled artifact or host recipe. Those platforms are not claimed tested by a
+Linux run and receive an explicit unsupported source-build result.
 
 ## Build and add a Rust plugin
 
@@ -41,8 +50,9 @@ cargo build --locked --release --jobs 2 -p peritus-deep-research
 python3 scripts/package.py deep-research --skip-build
 ```
 
-Python is a maintainer packaging helper only. End users install the compiled Rust
-plugin; Peritus needs no Python, Cargo, container, or separate provider login for it.
+Python is a maintainer packaging helper only. Prebuilt modules need no Python, Cargo,
+container, or separate provider login. Source-built modules currently require the pinned
+Rust toolchain and Bubblewrap available on the Linux host; Peritus owns the actual workflow.
 
 Copy [the native Rust template](templates/rust-plugin/) into `modules/YOUR-NAME/`.
 Change its package name, module ID, metadata, and executable resource paths; implement

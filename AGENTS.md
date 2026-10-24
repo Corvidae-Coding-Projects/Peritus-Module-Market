@@ -11,6 +11,8 @@ Native Rust modules, shared SDK contracts, or maintainer assets. Feature code be
 | [LICENSE](LICENSE) | Local contract, source or documentation; inspect the file for exact behavior. |
 | [README.md](README.md) | Local contract, source or documentation; inspect the file for exact behavior. |
 | [market.toml](market.toml) | Discoverable module catalog with exact package identities. |
+| [sources.toml](sources.toml) | Additive source-only module catalog; legacy executable clients never parse it. |
+| [.design](.design/AGENTS.md) | Collaborative feature designs, including requirements, evidence contracts and unresolved product decisions. |
 | [modules](modules/AGENTS.md) | Independent native Rust plugin crates. |
 | [rust-toolchain.toml](rust-toolchain.toml) | Local contract, source or documentation; inspect the file for exact behavior. |
 | [scripts](scripts/AGENTS.md) | Maintainer packaging helpers. |

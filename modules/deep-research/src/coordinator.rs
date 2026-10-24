@@ -277,6 +277,7 @@ impl State {
                 ),
                 system: format!("{}\n\n{}", crate::definitions::POLICY, role.instructions),
                 prompt,
+                cyber_access_program: None,
                 tools,
                 functions,
             },

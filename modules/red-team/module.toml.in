@@ -1,0 +1,38 @@
+# Source-only Phase 5 template. The host replaces these tokens after a pinned successful build.
+# This file is deliberately not a runnable package manifest and is not listed in market.toml.
+schema = 1
+id = "peritus.red-team"
+version = "0.1.0"
+name = "Red Team"
+description = "Authorized defensive source investigation with bounded discovery, contained probes, and independent skeptical adjudication."
+resources = [
+  "@EXECUTABLE@",
+  "skills/red-team/SKILL.md",
+  "skills/red-team/references/evidence-states.md",
+  "resources/skeleton-state-v1.json",
+  "resources/phase2-state-v2.json",
+  "resources/phase3-state-v3.json",
+  "resources/phase5-state-v5.json",
+  "corpus/LICENSE",
+  "corpus/README.md",
+  "corpus/known-disclosure/vulnerable.sh",
+  "corpus/known-disclosure/safe.sh",
+  "corpus/unknown-diagnostic/vulnerable.sh",
+  "corpus/unknown-diagnostic/safe.sh",
+  "corpus/adversarial/forged-success.sh",
+  "corpus/adversarial/crash.sh",
+  "src/main.rs",
+  "src/lib.rs",
+  "src/investigation.rs",
+  "src/report.rs",
+  "src/records.rs",
+  "src/state.rs",
+  "Cargo.toml",
+]
+
+[code]
+abi = 1
+tools = []
+
+[code.artifacts]
+"@TARGET@" = "@EXECUTABLE@"

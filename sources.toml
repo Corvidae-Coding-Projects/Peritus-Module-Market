@@ -1,0 +1,18 @@
+schema = 1
+name = "Peritus Module Market source packages"
+
+[[modules]]
+id = "peritus.red-team"
+name = "Red Team"
+version = "0.1.0"
+description = "Authorized defensive investigation with scoped source, contained Linux jobs, trusted evidence, and copy-only remediation artifacts."
+path = "modules/red-team"
+source_digest = "c3a7016ef976d847bcd4b9c95fc808ba106436eccea0e44e973ba37b7876a0c7"
+lockfile_digest = "6ec951fa0a297c76e8bcd8d2aa1763668dc28e2582ff29cb7b99179455fe5faa"
+toolchain = "1.97.1-x86_64-unknown-linux-gnu"
+target = "x86_64-unknown-linux-gnu"
+package = "peritus-red-team"
+executable = "peritus-red-team"
+manifest_template = "modules/red-team/module.toml.in"
+recipe = "cargo-release-v1"
+tags = ["security", "red-team", "defensive", "source-analysis"]

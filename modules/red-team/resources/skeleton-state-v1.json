@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "phase": 1,
+  "module_version": "0.1.0",
+  "checkpoint": {
+    "key": "red-team-phase-1-skeleton-v1",
+    "acknowledged": true,
+    "host_profile_schema": 1,
+    "observed_capabilities": [
+      "module.checkpoint@1",
+      "module.host-profile@1",
+      "module.private-state@1"
+    ]
+  }
+}
