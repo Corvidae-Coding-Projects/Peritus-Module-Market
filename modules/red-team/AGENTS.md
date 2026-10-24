@@ -13,7 +13,7 @@ bounded acceptance campaign.
 | --- | --- |
 | [Cargo.toml](Cargo.toml) | Rust package and source-only dependencies. |
 | [module.toml.in](module.toml.in) | Non-runnable template rendered only by the host-owned source build. |
-| [README.md](README.md) | Current phase, boundaries, and artifact policy. |
+| [README.md](README.md) | User guide for installation, scoped campaigns, controls, result interpretation, exports, troubleshooting, and safety boundaries. |
 | [corpus](corpus/AGENTS.md) | Licensed vulnerable/safe executable pairs and adversarial interface controls. |
 | [src](src/AGENTS.md) | Framed native entry point and hardened investigation/repair and human-interface coordinator. |
 | [skills](skills/AGENTS.md) | Canonical Red Team agent guidance. |
