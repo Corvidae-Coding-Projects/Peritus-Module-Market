@@ -2536,6 +2536,46 @@ pub struct ModuleLaboratoryCreateRequest {
     pub service_path: String,
 }
 
+/// Request to create a laboratory from the complete immutable source snapshot.
+///
+/// Unlike an exact compatibility recipe, this request does not require the target to implement a
+/// Peritus protocol or place code in specially named files. The host copies the complete admitted
+/// tree and exposes only generic, sandboxed process operations over it.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModuleLaboratorySourceCreateRequest {
+    /// Request schema, currently one.
+    pub schema: u16,
+    /// Exact immutable source authority selected by the user.
+    pub source: ScopedSourceAuthority,
+}
+
+/// One generic process invocation against a complete disposable source copy.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModuleLaboratoryProcessInput {
+    /// Input schema, currently one.
+    pub schema: u16,
+    /// Host-resolved runtime family, for example `direct`, `python3`, `node`, or `cargo`.
+    pub runtime: String,
+    /// Canonical source-relative entry point or project manifest.
+    pub entrypoint: String,
+    /// Literal argument vector. No shell parsing or expansion is performed.
+    pub arguments: Vec<String>,
+    /// Bounded standard-input bytes supplied to the process.
+    pub stdin: Vec<u8>,
+    /// Credential-free literal environment entries selected for the copied target.
+    pub environment: std::collections::BTreeMap<String, String>,
+    /// Per-invocation wall-clock ceiling in milliseconds.
+    pub wall_millis: u64,
+    /// Exit codes accepted by the caller's predeclared oracle.
+    pub expected_exit_codes: Vec<i32>,
+    /// Literal stdout fragments required by the caller's predeclared oracle.
+    pub stdout_contains: Vec<String>,
+    /// Literal stderr fragments required by the caller's predeclared oracle.
+    pub stderr_contains: Vec<String>,
+}
+
 /// Opaque identities returned for one laboratory. No resolved path, address, or credential appears.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]

@@ -44,14 +44,18 @@ analyzer/rule/advisory identities and reachability labels. Dead or test-only sou
 dependency, a scanner-shaped file in the target, or a severe-looking rule match never becomes a
 runtime-confirmed finding without independent real-interface execution evidence.
 
-For application-level execution, use only host-advertised laboratory recipes. Bind creation to the
-exact scoped-source authority and declared source roles, then preserve the opaque laboratory,
-service, endpoint, identity, and secret handles exactly. Never ask for or infer resolved paths,
-addresses, secret bytes, ambient credentials, containers, executables, or network policy. Drive the
-typed create, prepare, launch, invoke, snapshot, reset, stop, and teardown lifecycle in order. After
-reconnect, query retained status instead of creating a replacement. Treat failed readiness,
-secret-bearing output, incomplete process cleanup, changed source identity, or lost authority as a
-quarantine condition, not an invitation to fall back.
+For application-level execution, begin with the host's complete-source recipe. Bind creation to the
+exact scoped-source authority, copy the whole admitted snapshot, and use the target's real build or
+entry point through `process.execute.v1`; never demand Peritus-specific filenames, readiness JSON,
+state APIs, or support code from the target. Use a literal argv and a host-resolved runtime, declare
+the process oracle before execution, and retain stdout, stderr, exit, copied-tree, cleanup and
+original-source evidence. Exact two-file recipes remain compatibility/calibration fixtures and must
+never be substituted for the selected application or counted as its dynamic coverage. Preserve
+opaque laboratory and endpoint handles exactly. Never ask for resolved host paths, secret bytes,
+ambient credentials, containers, or host network policy. Drive create, prepare, launch, invoke,
+snapshot/reset, stop and teardown in order. After reconnect, query retained status instead of
+creating replacement work. Treat secret-bearing output, incomplete process cleanup, changed source
+identity or lost authority as a quarantine condition, not an invitation to fall back.
 
 Operate the actual program and observe the claimed boundary. Preserve concrete inputs, actions,
 receipts, counterevidence, and legitimate controls. Give skeptical review a separate context with raw

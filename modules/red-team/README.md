@@ -231,13 +231,46 @@ To inspect cancellation explicitly, use `adapter-stage diagnostic`, followed by 
 diagnostic commands prove lifecycle behavior only; they do not claim that any security class was
 tested.
 
-## Disposable application laboratories
+## Test an arbitrary source repository
 
-Phase 11 adds the first host-owned application laboratory. It copies two exact files from the
-selected immutable source into private resettable storage, launches the copied application and its
-backing store through Peritus's Linux isolation backend, and returns only opaque identities plus
-host-authored receipts. The module never receives resolved paths, socket names, target-only secret
-bytes, ambient credentials, or a way to select an executable or network policy.
+The default laboratory copies the complete selected immutable source tree into private resettable
+storage. The target does not need to contain special files, implement a Peritus protocol, emit
+readiness JSON, or expose a fake state service. Peritus discovers common entry points and can run an
+explicit real entry point with a host-resolved runtime, literal argv, bounded stdin, cleared
+credential-free environment, denied proof-time networking, process-tree containment, and a
+predeclared exit/output oracle. Static analysis still runs when a repository has no executable
+surface or its required toolchain is unavailable; that dynamic limitation is recorded as a gap,
+not as a clean result.
+
+Run the source-bound path after opening the application repository and selecting `scope`:
+
+```text
+/module peritus.red-team analyzer-install
+/module peritus.red-team analyze
+/module peritus.red-team lab-create source
+/module peritus.red-team lab-prepare
+/module peritus.red-team lab-launch
+/module peritus.red-team lab-run-auto
+/module peritus.red-team lab-snapshot
+/module peritus.red-team lab-reset
+/module peritus.red-team lab-stop
+/module peritus.red-team lab-teardown
+```
+
+`lab-run-auto` uses the highest-confidence entry point discovered from the copied source. Use
+`lab-run RUNTIME ENTRYPOINT [ARGS...]` when the repository has a different entry point. For exact
+stdin, environment, exit codes, and stdout/stderr fragments, use `lab-run-json` with the
+`ModuleLaboratoryProcessInput` shape. Supported host runtime families are `direct`, `python3`,
+`node`, `bash`, `ruby`, `php`, `perl`, `cargo`, `go`, `java`, `dotnet`, and `make`; availability is
+reported from the actual host. These names select host-owned runtime adapters, not arbitrary shell
+commands, and no argument receives shell parsing or expansion.
+
+## Compatibility laboratory fixtures
+
+The older Phase 11 fixture recipes copy two exact files, launch a controlled application/backing
+store pair, and return opaque identities plus host-authored receipts. They exist to qualify the
+HTTP, browser, identity, parser, workflow, boundary, and graph adapters. They are not a requirement
+on user applications and their results are never a substitute for testing the selected source.
 
 Run the included real multi-service fixture after `scope`:
 
@@ -261,11 +294,12 @@ the original source snapshot again, but cleanup remains available after source a
 it deletes copied source, state, sockets, snapshots, and secret material while recording that the
 original-source check was unavailable. Completed receipts survive client and daemon restarts.
 
-The initial recipes are deliberately exact: Linux, Python 3, one application process, and either one
-private Unix-socket key/value service or the Phase 13 HTTP/API service. Other languages, stores,
-operating systems, and arbitrary dependency graphs remain unsupported until separately registered recipes exist. Missing support is
-reported as a gap; there is no shell, container, `PATH`, host-network, credential, or production
-endpoint fallback. Users do not need to know or configure a container runtime.
+The compatibility recipes remain deliberately exact. The complete-source recipe is protocol-free
+and language-neutral at the source boundary; dynamic execution depends only on a supported runtime
+being present and a real entry point being selected. Missing toolchains or application-specific
+service topology are reported as gaps. There is no shell-string evaluation, container requirement,
+host-network, credential, or production-endpoint fallback. Users do not need to know or configure a
+container runtime.
 
 ## Test a real HTTP/API laboratory
 

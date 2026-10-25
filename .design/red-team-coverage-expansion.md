@@ -934,6 +934,28 @@ does not establish universal vulnerability coverage, other-platform or other-bro
 comparative performance, or parity with an experienced human team. Those remain inputs to the
 deferred qualification program rather than claims of Phase 20.
 
+### Phase 21 — complete-source target ingress
+
+**Problem corrected:** Phase 20's complete journey exercised registered adapters against bundled
+two-file Python twins. Those twins qualify the adapters, but they are not a legitimate substitute
+for the application selected by the user. Requiring an ordinary target to implement their filenames,
+readiness JSON, state protocol, or routes inverted the plugin boundary.
+
+**Implemented boundary:** `linux.complete-source.v1` accepts the complete immutable scoped-source
+snapshot with no target-side contract. The host materializes every admitted regular file with its
+source-relative path and executable bit, discovers conventional entry-point candidates, and exposes
+`process.execute.v1`. That operation accepts a typed runtime family, canonical source-relative entry
+point, literal argv, bounded stdin, credential-free literal environment, and a predeclared
+exit/stdout/stderr oracle. It runs from the copied tree with cleared ambient environment, denied
+networking, bounded resources, complete process-tree cleanup observation, copied-tree snapshots and
+reset, teardown, and original-source verification. There is no shell-string evaluation.
+
+The default complete journey now uses the selected source tree. Bundled vulnerable/safe recipes are
+explicitly compatibility and adapter-calibration targets; their receipts do not count as dynamic
+coverage of another repository. Every repository remains eligible for immutable source analysis.
+Dynamic process coverage requires an actual entry point and an available host runtime; absence is a
+named gap rather than a demand that the application adopt a Peritus laboratory protocol.
+
 ## Data and compatibility
 
 - Add host capability versions; do not reinterpret version-one request or receipt bytes.

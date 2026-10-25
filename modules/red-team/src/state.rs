@@ -10,9 +10,10 @@ use peritus_plugin_sdk::{
     ModuleIdentityAccessObservation, ModuleJobCancelRequest, ModuleJobLogRequest, ModuleJobReceipt,
     ModuleJobRequest, ModuleJobStatusRequest, ModuleLaboratoryCatalog,
     ModuleLaboratoryCreateRequest, ModuleLaboratoryInvokeRequest, ModuleLaboratoryLifecycleRequest,
-    ModuleLaboratoryReceipt, ModuleLaboratoryStatus, ModulePatchReceipt,
-    ModuleSourceAnalysisObservation, ModuleWorkflowObservation, ScopedSourceAuthority,
-    ScopedSourceEntry, ScopedSourceHandle, ScopedSourceVerification, ScopedSourceVerifyRequest,
+    ModuleLaboratoryReceipt, ModuleLaboratorySourceCreateRequest, ModuleLaboratoryStatus,
+    ModulePatchReceipt, ModuleSourceAnalysisObservation, ModuleWorkflowObservation,
+    ScopedSourceAuthority, ScopedSourceEntry, ScopedSourceHandle, ScopedSourceVerification,
+    ScopedSourceVerifyRequest,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -507,6 +508,10 @@ pub(crate) enum PendingRequest {
         key: String,
         request: ModuleLaboratoryCreateRequest,
     },
+    LaboratorySourceCreate {
+        key: String,
+        request: ModuleLaboratorySourceCreateRequest,
+    },
     LaboratoryLifecycle {
         key: String,
         operation: String,
@@ -578,6 +583,7 @@ impl PendingRequest {
             | Self::AdapterExecute { key, .. }
             | Self::LaboratoryCatalog { key }
             | Self::LaboratoryCreate { key, .. }
+            | Self::LaboratorySourceCreate { key, .. }
             | Self::LaboratoryLifecycle { key, .. }
             | Self::LaboratoryInvoke { key, .. }
             | Self::Capture { key, .. }

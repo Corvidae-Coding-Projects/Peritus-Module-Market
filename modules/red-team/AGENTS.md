@@ -20,8 +20,10 @@ one-operation-at-a-time complete-campaign scheduling with shared TUI/WebUI contr
 pause/steer/retry/skip/abort state, restart recovery, fail-closed corruption handling, and SARIF,
 contained proof jobs, digest-pinned dependency preparation, bounded autonomous
 discovery, typed allowlisted adapter preparation/install/reuse/removal and host-authored diagnostic
-receipts, host-owned disposable application laboratories with opaque service identities, resettable
-private state, containment telemetry and durable cleanup receipts, independent skeptical
+receipts, host-owned disposable application laboratories that copy complete arbitrary source trees
+and run real entry points through bounded host runtimes without target-specific contracts, plus
+opaque compatibility-fixture service identities, resettable private state, containment telemetry
+and durable cleanup receipts, independent skeptical
 adjudication, honest reports, and a pinned module-store source-build template. Confirmed findings
 advance automatically through copy-only
 root-cause patching, replay matrices, independent patch review, original-byte verification, and the

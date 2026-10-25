@@ -295,6 +295,10 @@ fn satisfied(
     ) {
         return Ok(now.observations > step.baseline.observations && observed > 0);
     }
+    if command == "lab-run-auto" {
+        return Ok(now.laboratory_receipts > step.baseline.laboratory_receipts
+            && latest_phase(state) == Some(ModuleLaboratoryPhase::Ready));
+    }
     if command.starts_with("lab-create ") {
         return Ok(now.laboratory_statuses > step.baseline.laboratory_statuses
             && latest_phase(state) == Some(ModuleLaboratoryPhase::Created));
@@ -633,40 +637,25 @@ fn plan() -> Vec<state::JourneyStep> {
     let mut steps = Vec::new();
     for (id, label, command) in [
         ("install-source", "Install source analyzer", "analyzer-install"),
-        ("install-api", "Install HTTP/API adapter", "api-install"),
-        ("install-browser", "Install browser adapter", "browser-install"),
-        ("install-identity", "Install identity adapter", "identity-install"),
-        ("install-file", "Install file/parser adapter", "file-fuzz-install"),
-        ("install-workflow", "Install workflow adapter", "workflow-install"),
-        ("install-boundary", "Install boundary adapter", "boundary-install"),
-        ("install-graph", "Install attack-graph adapter", "graph-install"),
         ("analyze", "Analyze immutable scoped source", "analyze"),
     ] {
         steps.push(step(id, label, command, None));
     }
-    add_lab(&mut steps, "http", "lab-create http-vulnerable", &["api-run", "browser-run"]);
-    add_lab(&mut steps, "identity", "lab-create identity-vulnerable", &["identity-run"]);
-    add_lab(&mut steps, "file", "lab-create file-vulnerable", &["file-fuzz-run"]);
-    add_lab(&mut steps, "workflow", "lab-create workflow-vulnerable", &["workflow-run"]);
-    add_lab(&mut steps, "boundary", "lab-create boundary-vulnerable", &["boundary-run"]);
-    add_open_lab(&mut steps, "graph-vulnerable", "lab-create http-vulnerable");
-    add_open_lab(&mut steps, "graph-safe", "lab-create http-safe");
-    steps.push(step("graph-run", "Run receipt-backed cross-adapter graph", "graph-run", None));
-    for alias in ["graph-safe", "graph-vulnerable"] {
-        steps.push(step(
-            &format!("{alias}-select"),
-            &format!("Select {alias} for cleanup"),
-            &format!("$select {alias}"),
-            None,
-        ));
-        steps.push(step(&format!("{alias}-stop"), &format!("Stop {alias}"), "lab-stop", None));
-        steps.push(step(
-            &format!("{alias}-teardown"),
-            &format!("Tear down {alias}"),
-            "lab-teardown",
-            None,
-        ));
-    }
+    add_open_lab(&mut steps, "source", "lab-create source");
+    steps.push(step(
+        "source-process",
+        "Execute the best discovered real source entry point",
+        "lab-run-auto",
+        None,
+    ));
+    steps.push(step("source-snapshot", "Snapshot disposable source effects", "lab-snapshot", None));
+    steps.push(step("source-stop", "Stop source laboratory", "lab-stop", None));
+    steps.push(step(
+        "source-teardown",
+        "Tear down source laboratory and verify original bytes",
+        "lab-teardown",
+        None,
+    ));
     for (id, label, command) in [
         ("export-markdown", "Export Markdown report", "report"),
         ("export-json", "Export JSON report", "report-json"),
@@ -676,25 +665,6 @@ fn plan() -> Vec<state::JourneyStep> {
         steps.push(step(id, label, command, None));
     }
     steps
-}
-
-fn add_lab(steps: &mut Vec<state::JourneyStep>, alias: &str, create: &str, campaigns: &[&str]) {
-    add_open_lab(steps, alias, create);
-    for command in campaigns {
-        steps.push(step(
-            &format!("{alias}-{command}"),
-            &format!("Run {command} in {alias}"),
-            command,
-            None,
-        ));
-    }
-    steps.push(step(&format!("{alias}-stop"), &format!("Stop {alias}"), "lab-stop", None));
-    steps.push(step(
-        &format!("{alias}-teardown"),
-        &format!("Tear down {alias}"),
-        "lab-teardown",
-        None,
-    ));
 }
 
 fn add_open_lab(steps: &mut Vec<state::JourneyStep>, alias: &str, create: &str) {
@@ -721,7 +691,7 @@ fn add_open_lab(steps: &mut Vec<state::JourneyStep>, alias: &str, create: &str) 
 fn plan_text() -> String {
     let steps = plan();
     let mut text = format!(
-        "# Complete Red Team campaign\n\n{} sequential steps; at most one host operation is active. The journey installs every registered adapter, scans immutable source, exercises HTTP/API, browser, identity, file/parser, workflow, boundary and cross-adapter graph profiles in disposable laboratories, proves cleanup, and exports Markdown, JSON, SARIF and replay artifacts.\n\n",
+        "# Source-bound Red Team campaign\n\n{} sequential steps; at most one host operation is active. The journey scans the exact immutable source, copies the complete tree, executes a discovered real entry point without requiring target-specific contracts, records copied-tree effects, proves cleanup and original-source integrity, and exports Markdown, JSON, SARIF and replay artifacts. Class-specific adapters remain separate applicable-method steps; their bundled fixtures are calibration targets and are never substituted for the selected application.\n\n",
         steps.len()
     );
     for (index, step) in steps.iter().enumerate() {

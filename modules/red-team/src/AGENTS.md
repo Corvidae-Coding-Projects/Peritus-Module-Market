@@ -15,7 +15,7 @@
 | [boundary_authority.rs](boundary_authority.rs) | Phase 18 private-network, TLS, platform-policy, contained-privilege, and delegated-authority commands, receipt validation, coverage, history, and rejection probes. |
 | [investigation.rs](investigation.rs) | Bounded inventory, separate discovery/skeptic roles, hypothesis and probe scheduling, steering, reuse and evidence-gated adjudication. |
 | [journey.rs](journey.rs) | Phase 20 complete-campaign planner and durable one-operation scheduler with shared TUI/WebUI controls, pause, steering, retry, skip, abort cleanup, restart recovery, and step-level evidence admission. |
-| [laboratory.rs](laboratory.rs) | Phase 11 copied-application laboratory commands, typed lifecycle requests, opaque-handle projection, host-receipt admission, and TUI/WebUI status. |
+| [laboratory.rs](laboratory.rs) | Complete-source and compatibility laboratory commands, generic process invocations, typed lifecycle requests, opaque-handle projection, host-receipt admission, and TUI/WebUI status. |
 | [repair.rs](repair.rs) | Automatic root-cause patch planning, copy-only replay matrices, independent patch review, and final original-byte verification. |
 | [records.rs](records.rs) | Version-one campaign, scope, source, coverage, hypothesis, evidence, finding, patch, review, and report contracts. |
 | [report.rs](report.rs) | Honest Markdown/JSON/SARIF reports, exact patch files, complete-journey state, and replay bundles exposed through the final export projection. |

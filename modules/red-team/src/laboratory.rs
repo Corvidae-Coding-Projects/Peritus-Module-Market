@@ -4,12 +4,14 @@ use crate::{Error, invalid, reply, state, state::PendingRequest};
 use peritus_plugin_sdk::{
     HOST_CAPABILITY_APPLICATION_LABORATORY, ModuleAction, ModuleHostProfile, ModuleHostRequest,
     ModuleLaboratoryCatalog, ModuleLaboratoryCreateRequest, ModuleLaboratoryInvokeRequest,
-    ModuleLaboratoryLifecycleRequest, ModuleLaboratoryResult,
+    ModuleLaboratoryLifecycleRequest, ModuleLaboratoryProcessInput, ModuleLaboratoryResult,
+    ModuleLaboratorySourceCreateRequest,
 };
 use serde_json::{Value, json};
 
 const RECIPE: &str = "linux.python-unix-store.v1";
 const HTTP_RECIPE: &str = "linux.python-http-api.v1";
+const PROCESS_OPERATION: &str = "process.execute.v1";
 const FIXTURE_APPLICATION: &str = "modules/red-team/corpus/laboratory-mixed/application.py";
 const FIXTURE_SERVICE: &str = "modules/red-team/corpus/laboratory-mixed/service.py";
 const HTTP_VULNERABLE_APPLICATION: &str =
@@ -45,6 +47,7 @@ pub(crate) fn handles(command: &str) -> bool {
         command,
         "laboratories"
             | "laboratory-history"
+            | "lab-create source"
             | "lab-create fixture"
             | "lab-create http-vulnerable"
             | "lab-create http-safe"
@@ -61,12 +64,15 @@ pub(crate) fn handles(command: &str) -> bool {
             | "lab-status"
             | "lab-snapshot"
             | "lab-reset"
+            | "lab-run-auto"
             | "lab-stop"
             | "lab-teardown"
             | "lab-probe-wrong-endpoint"
             | "lab-probe-unregistered-operation"
     ) || command.starts_with("lab-create ")
         || command.starts_with("lab-create-http ")
+        || command.starts_with("lab-run ")
+        || command.starts_with("lab-run-json ")
         || command.starts_with("lab-select ")
         || command.starts_with("lab-use ")
 }
@@ -93,6 +99,7 @@ pub(crate) fn command(
             "catalog",
         ),
         "laboratory-history" => Ok(reply(view(state), profile, super::actions(state), None)),
+        "lab-create source" => create_source(parameters, state),
         "lab-create fixture" => {
             create(parameters, state, RECIPE, FIXTURE_APPLICATION.into(), FIXTURE_SERVICE.into())
         }
@@ -194,6 +201,79 @@ pub(crate) fn command(
             let endpoint = current_status(state)?.handle.endpoint_handle.clone();
             invoke(parameters, state, endpoint, "state.not-registered.v1", "must-not-write")
         }
+        "lab-run-auto" => {
+            let laboratory_id = current_status(state)?.handle.laboratory_id.clone();
+            let candidate = state
+                .laboratory_receipts
+                .iter()
+                .rev()
+                .find(|receipt| {
+                    receipt.laboratory_id == laboratory_id && receipt.operation == "prepare"
+                })
+                .and_then(|receipt| receipt.observation["launch_candidates"].as_array())
+                .and_then(|candidates| candidates.first())
+                .ok_or_else(|| {
+                    invalid(
+                        "the complete source copy has no inferred launch candidate; use lab-run with the repository's actual runtime and entrypoint",
+                    )
+                })?;
+            let runtime = candidate["runtime"]
+                .as_str()
+                .ok_or_else(|| invalid("host launch candidate has no runtime"))?;
+            let entrypoint = candidate["entrypoint"]
+                .as_str()
+                .ok_or_else(|| invalid("host launch candidate has no entrypoint"))?;
+            invoke_process(
+                parameters,
+                state,
+                ModuleLaboratoryProcessInput {
+                    schema: 1,
+                    runtime: runtime.into(),
+                    entrypoint: entrypoint.into(),
+                    arguments: Vec::new(),
+                    stdin: Vec::new(),
+                    environment: std::collections::BTreeMap::new(),
+                    wall_millis: 30_000,
+                    expected_exit_codes: vec![0],
+                    stdout_contains: Vec::new(),
+                    stderr_contains: Vec::new(),
+                },
+            )
+        }
+        _ if command.starts_with("lab-run-json ") => {
+            let encoded = command.trim_start_matches("lab-run-json ").trim();
+            let input: ModuleLaboratoryProcessInput = serde_json::from_str(encoded)
+                .map_err(|error| invalid(format!("lab-run-json input is invalid: {error}")))?;
+            invoke_process(parameters, state, input)
+        }
+        _ if command.starts_with("lab-run ") => {
+            let values = command
+                .trim_start_matches("lab-run ")
+                .split_whitespace()
+                .map(str::to_owned)
+                .collect::<Vec<_>>();
+            if values.len() < 2 {
+                return Err(invalid(
+                    "lab-run requires RUNTIME ENTRYPOINT followed by optional literal arguments",
+                ));
+            }
+            invoke_process(
+                parameters,
+                state,
+                ModuleLaboratoryProcessInput {
+                    schema: 1,
+                    runtime: values[0].clone(),
+                    entrypoint: values[1].clone(),
+                    arguments: values[2..].to_vec(),
+                    stdin: Vec::new(),
+                    environment: std::collections::BTreeMap::new(),
+                    wall_millis: 30_000,
+                    expected_exit_codes: vec![0],
+                    stdout_contains: Vec::new(),
+                    stderr_contains: Vec::new(),
+                },
+            )
+        }
         _ if command.starts_with("lab-select ") => {
             let prefix = command.trim_start_matches("lab-select ").trim();
             if prefix.is_empty() {
@@ -266,6 +346,7 @@ pub(crate) fn admit(
             catalog_text(&catalog)
         }
         PendingRequest::LaboratoryCreate { .. }
+        | PendingRequest::LaboratorySourceCreate { .. }
         | PendingRequest::LaboratoryLifecycle { .. }
         | PendingRequest::LaboratoryInvoke { .. } => {
             let result: ModuleLaboratoryResult = serde_json::from_value(output)?;
@@ -356,6 +437,19 @@ fn create(
     )
 }
 
+fn create_source(parameters: &Value, state: &mut state::State) -> Result<ModuleAction, Error> {
+    let source = state
+        .active_handle()
+        .ok_or_else(|| invalid("capture source with `scope` before creating a laboratory"))?;
+    let request = ModuleLaboratorySourceCreateRequest { schema: 1, source };
+    service(
+        parameters,
+        state,
+        PendingRequest::LaboratorySourceCreate { key: next_key(state, "create-source"), request },
+        "create-source",
+    )
+}
+
 fn lifecycle(
     parameters: &Value,
     state: &mut state::State,
@@ -398,6 +492,27 @@ fn invoke(
     )
 }
 
+fn invoke_process(
+    parameters: &Value,
+    state: &mut state::State,
+    input: ModuleLaboratoryProcessInput,
+) -> Result<ModuleAction, Error> {
+    let status = current_status(state)?;
+    let request = ModuleLaboratoryInvokeRequest {
+        schema: 1,
+        laboratory_id: status.handle.laboratory_id.clone(),
+        endpoint_handle: status.handle.endpoint_handle.clone(),
+        operation: PROCESS_OPERATION.into(),
+        input: serde_json::to_value(input)?,
+    };
+    service(
+        parameters,
+        state,
+        PendingRequest::LaboratoryInvoke { key: next_key(state, "process"), request },
+        "invoke",
+    )
+}
+
 fn service(
     parameters: &Value,
     state: &mut state::State,
@@ -407,6 +522,7 @@ fn service(
     let input = match &pending {
         PendingRequest::LaboratoryCatalog { .. } => json!({}),
         PendingRequest::LaboratoryCreate { request, .. } => serde_json::to_value(request)?,
+        PendingRequest::LaboratorySourceCreate { request, .. } => serde_json::to_value(request)?,
         PendingRequest::LaboratoryLifecycle { request, .. } => serde_json::to_value(request)?,
         PendingRequest::LaboratoryInvoke { request, .. } => serde_json::to_value(request)?,
         _ => return Err(invalid("non-laboratory request reached laboratory service")),

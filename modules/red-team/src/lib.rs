@@ -190,7 +190,7 @@ fn command(parameters: &Value) -> Result<ModuleAction, Error> {
         return cancel_job(parameters, &host, &mut state, command);
     }
     Ok(reply(
-        "Unknown Red Team command. Use campaign-plan, campaign-start, campaign, campaign-next, campaign-pause, campaign-resume, campaign-steer DETAILS, campaign-retry, campaign-skip, campaign-abort, start, status, pause, resume, steer DETAILS, scope, refresh, profiles, surfaces, methods, coverage, analyzers, analyzer-install, analyze, analysis-history, analyzer-status, analyzer-remove, api, api-install, api-run, api-history, api-status, api-remove, browser, browser-install, browser-run, browser-history, browser-status, browser-remove, identity, identity-install, identity-run, identity-history, file-fuzz, file-fuzz-install, file-fuzz-run, file-fuzz-history, file-fuzz-status, file-fuzz-remove, workflow, workflow-install, workflow-run, workflow-history, workflow-status, workflow-remove, boundary, boundary-install, boundary-run, boundary-history, boundary-status, boundary-remove, graph, graph-install, graph-run, graph-history, graph-status, graph-remove, laboratories, lab-create fixture, lab-create http-vulnerable, lab-create http-safe, lab-create identity-vulnerable, lab-create identity-safe, lab-create file-vulnerable, lab-create file-safe, lab-create workflow-vulnerable, lab-create workflow-safe, lab-create boundary-vulnerable, lab-create boundary-safe, lab-prepare, lab-launch, lab-status, lab-select VALUE, lab-use VALUE, lab-snapshot, lab-reset, lab-stop, lab-teardown, adapters, adapter-install diagnostic, adapter-stage diagnostic, adapter-complete, adapter-cancel, adapter-status, adapter-run MESSAGE, adapter-remove, manifest, observe PATH [offset=N] [bytes=N], prepare HTTPS_URL sha256=DIGEST [bytes=N], probe PATH [input=LITERAL], jobs, job ID, job-log ID STREAM [offset=N] [bytes=N], job-cancel ID, findings, patches, report, report-json, sarif, bundle, revoke, compatibility, contract, or checkpoint.",
+        "Unknown Red Team command. Use campaign-plan, campaign-start, campaign, campaign-next, campaign-pause, campaign-resume, campaign-steer DETAILS, campaign-retry, campaign-skip, campaign-abort, start, status, pause, resume, steer DETAILS, scope, refresh, profiles, surfaces, methods, coverage, analyzers, analyzer-install, analyze, analysis-history, analyzer-status, analyzer-remove, api, api-install, api-run, api-history, api-status, api-remove, browser, browser-install, browser-run, browser-history, browser-status, browser-remove, identity, identity-install, identity-run, identity-history, file-fuzz, file-fuzz-install, file-fuzz-run, file-fuzz-history, file-fuzz-status, file-fuzz-remove, workflow, workflow-install, workflow-run, workflow-history, workflow-status, workflow-remove, boundary, boundary-install, boundary-run, boundary-history, boundary-status, boundary-remove, graph, graph-install, graph-run, graph-history, graph-status, graph-remove, laboratories, lab-create source, lab-prepare, lab-launch, lab-run-auto, lab-run RUNTIME ENTRYPOINT [ARGS...], lab-run-json JSON, lab-status, lab-select VALUE, lab-snapshot, lab-reset, lab-stop, lab-teardown, compatibility fixture commands, adapters, adapter-install diagnostic, adapter-stage diagnostic, adapter-complete, adapter-cancel, adapter-status, adapter-run MESSAGE, adapter-remove, manifest, observe PATH [offset=N] [bytes=N], prepare HTTPS_URL sha256=DIGEST [bytes=N], probe PATH [input=LITERAL], jobs, job ID, job-log ID STREAM [offset=N] [bytes=N], job-cancel ID, findings, patches, report, report-json, sarif, bundle, revoke, compatibility, contract, or checkpoint.",
         &host,
         actions(&state),
         None,
@@ -633,6 +633,11 @@ pub(crate) fn resume_pending(pending: &PendingRequest) -> Result<ModuleAction, E
             "create",
             serde_json::to_value(request)?,
         ),
+        PendingRequest::LaboratorySourceCreate { request, .. } => (
+            HOST_CAPABILITY_APPLICATION_LABORATORY,
+            "create-source",
+            serde_json::to_value(request)?,
+        ),
         PendingRequest::LaboratoryLifecycle { operation, request, .. } => (
             HOST_CAPABILITY_APPLICATION_LABORATORY,
             operation.as_str(),
@@ -868,6 +873,7 @@ fn host_result(parameters: &Value) -> Result<ModuleAction, Error> {
         }
         PendingRequest::LaboratoryCatalog { .. }
         | PendingRequest::LaboratoryCreate { .. }
+        | PendingRequest::LaboratorySourceCreate { .. }
         | PendingRequest::LaboratoryLifecycle { .. }
         | PendingRequest::LaboratoryInvoke { .. } => {
             return Err(invalid(
@@ -1057,6 +1063,7 @@ fn pending_capability(pending: &PendingRequest) -> &'static str {
         | PendingRequest::AdapterExecute { .. } => HOST_CAPABILITY_ADAPTER_RUNTIME,
         PendingRequest::LaboratoryCatalog { .. }
         | PendingRequest::LaboratoryCreate { .. }
+        | PendingRequest::LaboratorySourceCreate { .. }
         | PendingRequest::LaboratoryLifecycle { .. }
         | PendingRequest::LaboratoryInvoke { .. } => HOST_CAPABILITY_APPLICATION_LABORATORY,
         PendingRequest::Capture { .. }
