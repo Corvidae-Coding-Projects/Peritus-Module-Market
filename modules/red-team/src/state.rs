@@ -102,6 +102,8 @@ pub(crate) struct State {
     pub(crate) laboratory_receipts: Vec<ModuleLaboratoryReceipt>,
     #[serde(default)]
     pub(crate) laboratory_errors: Vec<String>,
+    #[serde(default)]
+    pub(crate) runtime_targets: Vec<RuntimeTargetBinding>,
     pub(crate) hypotheses: Vec<HypothesisRecord>,
     pub(crate) observations: Vec<SourceObservation>,
     #[serde(default)]
@@ -128,6 +130,22 @@ pub(crate) struct State {
     pub(crate) original_verification: Option<ScopedSourceVerification>,
     #[serde(default)]
     pub(crate) journey: JourneyState,
+}
+
+/// Module-owned launch metadata for one generic host laboratory identity.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct RuntimeTarget {
+    pub(crate) application_path: String,
+    pub(crate) service_path: String,
+}
+
+/// Durable association between an opaque generic laboratory and module-owned target metadata.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct RuntimeTargetBinding {
+    pub(crate) laboratory_id: String,
+    pub(crate) target: RuntimeTarget,
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
@@ -511,6 +529,8 @@ pub(crate) enum PendingRequest {
     LaboratorySourceCreate {
         key: String,
         request: ModuleLaboratorySourceCreateRequest,
+        #[serde(default)]
+        target: Option<RuntimeTarget>,
     },
     LaboratoryLifecycle {
         key: String,
@@ -652,6 +672,7 @@ impl Default for State {
             laboratory_statuses: Vec::new(),
             laboratory_receipts: Vec::new(),
             laboratory_errors: Vec::new(),
+            runtime_targets: Vec::new(),
             hypotheses: Vec::new(),
             observations: Vec::new(),
             jobs: Vec::new(),
@@ -709,7 +730,7 @@ impl State {
                 .checked_add(1)
                 .ok_or_else(|| invalid("scope revision overflow"))?,
             source_label: handle.display_name.clone(),
-            attacker_model: "The selected source authority permits digest-pinned dependency preparation and literal input only to host-owned contained proof adapters."
+            attacker_model: "The selected source authority permits literal input only to module-owned contained proof adapters."
                 .into(),
             allowed_effects: vec![
                 "inert_source_capture".into(),

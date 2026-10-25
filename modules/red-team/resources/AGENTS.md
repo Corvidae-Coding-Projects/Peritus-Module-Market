@@ -2,6 +2,8 @@
 
 | File | Role |
 | --- | --- |
+| [browser_campaign.py](browser_campaign.py) | Module-owned Playwright campaign routed exclusively to module-owned private Unix target sockets. |
+| [attack_graph_browser.py](attack_graph_browser.py) | Module-owned stored-content browser replay used by the receipt-backed attack graph. |
 | [skeleton-state-v1.json](skeleton-state-v1.json) | Legacy Phase 1 checkpoint used to exercise forward migration. |
 | [phase2-state-v2.json](phase2-state-v2.json) | Canonical empty Phase 2 campaign checkpoint fixture. |
 | [phase3-state-v3.json](phase3-state-v3.json) | Canonical empty Phase 3 campaign-and-jobs checkpoint fixture. |

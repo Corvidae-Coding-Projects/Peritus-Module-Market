@@ -1,7 +1,7 @@
 # Phase 15 identity corpus
 
 The vulnerable and safe twins expose the same private HTTP identity/session/access-control surface.
-They are copied into host-owned disposable laboratories and never run in place.
+They are copied into module-owned target runtimes inside disposable workers and never run in place.
 
 | Folder | Role |
 | --- | --- |

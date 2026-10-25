@@ -34,7 +34,7 @@ pub(crate) fn initialize_methods(state: &mut State) {
     }
 }
 
-/// Advances only static-analysis cells backed by one exact host-authored scan receipt.
+/// Advances only static-analysis cells backed by one exact module-authored scan receipt.
 pub(crate) fn record_static_method(
     state: &mut State,
     evidence: &RecordId,
@@ -51,7 +51,7 @@ pub(crate) fn record_static_method(
         if method_ids.contains(&cell.method) {
             cell.state = CoverageState::Examined;
             cell.reason = format!(
-                "Host static analyzers completed against snapshot `{source_snapshot}`. This establishes source examination only, not runtime exploitability."
+                "Module-owned static analyzers completed against snapshot `{source_snapshot}`. This establishes source examination only, not runtime exploitability."
             );
             if !cell.evidence.contains(evidence) {
                 cell.evidence.push(evidence.clone());
@@ -82,7 +82,7 @@ pub(crate) fn record_http_method(state: &mut State, evidence: &RecordId) -> usiz
     for cell in &mut state.coverage_cells {
         if method_ids.contains(&cell.method) && families.contains(&cell.family.as_str()) {
             cell.state = CoverageState::Examined;
-            cell.reason = "The registered HTTP/API adapter executed the pinned real-interface suite with host-captured traffic and copied-state oracles.".into();
+            cell.reason = "The registered HTTP/API adapter executed the pinned real-interface suite with module-captured traffic and copied-state oracles.".into();
             if !cell.evidence.contains(evidence) {
                 cell.evidence.push(evidence.clone());
             }
@@ -140,7 +140,7 @@ pub(crate) fn record_identity_method(state: &mut State, evidence: &RecordId) -> 
     for cell in &mut state.coverage_cells {
         if method_ids.contains(&cell.method) && families.contains(&cell.family.as_str()) {
             cell.state = CoverageState::Examined;
-            cell.reason = "The registered identity-access adapter executed its pinned multi-user lifecycle and differential authorization suite through host-private credentials and copied-state oracles.".into();
+            cell.reason = "The registered identity-access adapter executed its pinned multi-user lifecycle and differential authorization suite through module-private credentials and copied-state oracles.".into();
             if !cell.evidence.contains(evidence) {
                 cell.evidence.push(evidence.clone());
             }
@@ -170,7 +170,7 @@ pub(crate) fn record_file_fuzz_method(state: &mut State, evidence: &RecordId) ->
     for cell in &mut state.coverage_cells {
         if method_ids.contains(&cell.method) && families.contains(&cell.family.as_str()) {
             cell.state = CoverageState::Examined;
-            cell.reason = "The registered host file/parser adapter exercised real filesystem and archive boundaries, structured inputs, deterministic generated cases, and an isolated native child fault with private canaries and minimized replay inputs.".into();
+            cell.reason = "The registered module file/parser adapter exercised real filesystem and archive boundaries, structured inputs, deterministic generated cases, and an isolated native child fault with private canaries and minimized replay inputs.".into();
             if !cell.evidence.contains(evidence) {
                 cell.evidence.push(evidence.clone());
             }
@@ -195,7 +195,7 @@ pub(crate) fn record_workflow_state_method(state: &mut State, evidence: &RecordI
     for cell in &mut state.coverage_cells {
         if method_ids.contains(&cell.method) && families.contains(&cell.family.as_str()) {
             cell.state = CoverageState::Examined;
-            cell.reason = "The registered host workflow-state adapter exercised documented invariants across real ordered actions, duplicate/retry/cancellation/crash recovery, quota/accounting, and a retained deterministic two-worker schedule.".into();
+            cell.reason = "The registered module workflow-state adapter exercised documented invariants across real ordered actions, duplicate/retry/cancellation/crash recovery, quota/accounting, and a retained deterministic two-worker schedule.".into();
             if !cell.evidence.contains(evidence) {
                 cell.evidence.push(evidence.clone());
             }
@@ -226,7 +226,7 @@ pub(crate) fn record_boundary_authority_method(state: &mut State, evidence: &Rec
     for cell in &mut state.coverage_cells {
         if method_ids.contains(&cell.method) && families.contains(&cell.family.as_str()) {
             cell.state = CoverageState::Examined;
-            cell.reason = "The registered host boundary-authority adapter exercised private DNS, redirect, callback, proxy, SSRF, TLS, local policy, contained privilege, and confused-deputy cases without granting routable network or host authority.".into();
+            cell.reason = "The registered module boundary-authority adapter exercised private DNS, redirect, callback, proxy, SSRF, TLS, local policy, contained privilege, and confused-deputy cases without granting routable network or host authority.".into();
             if !cell.evidence.contains(evidence) {
                 cell.evidence.push(evidence.clone());
             }
@@ -255,7 +255,7 @@ pub(crate) fn record_attack_graph_method(state: &mut State, evidence: &RecordId)
     for cell in &mut state.coverage_cells {
         if method_ids.contains(&cell.method) && families.contains(&cell.family.as_str()) {
             cell.state = CoverageState::Examined;
-            cell.reason = "The registered host attack-graph adapter composed exact source, private HTTP, and isolated-browser receipts; broke a prerequisite, rejected an unsupported edge, and accepted the copy-only repair only after adapter-specific replays.".into();
+            cell.reason = "The registered module attack-graph adapter composed exact source, private HTTP, and isolated-browser receipts; broke a prerequisite, rejected an unsupported edge, and accepted the copy-only repair only after adapter-specific replays.".into();
             if !cell.evidence.contains(evidence) {
                 cell.evidence.push(evidence.clone());
             }
@@ -987,63 +987,63 @@ fn methods(campaign: &RecordId) -> Vec<MethodRecord> {
             STATIC_ANALYSIS_METHOD,
             MethodAvailability::Available,
             Some("source.scan.v1"),
-            Some("module.adapter-runtime@1"),
+            Some("module.worker@1"),
             "Deterministic language, pattern, bounded same-file flow, dependency, secret and configuration analysis over an immutable snapshot; emits source leads only.",
         ),
         (
             HTTP_API_METHOD,
             MethodAvailability::Available,
             Some("http.campaign.v1"),
-            Some("module.adapter-runtime@1"),
-            "Host-captured HTTP/1.1, live OpenAPI, GraphQL, WebSocket and JSON-RPC campaign against an exact ready disposable laboratory; authentication and browser trust remain separate phases.",
+            Some("module.worker@1"),
+            "Module-captured HTTP/1.1, live OpenAPI, GraphQL, WebSocket and JSON-RPC campaign against an exact ready disposable laboratory; authentication and browser trust remain separate phases.",
         ),
         (
             BROWSER_METHOD,
             MethodAvailability::Available,
             Some("browser.campaign.v1"),
-            Some("module.adapter-runtime@1"),
+            Some("module.worker@1"),
             "Isolated real Chromium campaign with DOM/script, navigation, origin, cookie, CSP, CSRF, validation, crawl, upload/download, reset and retained evidence; other engines and application-specific workflows remain explicit gaps.",
         ),
         (
             IDENTITY_METHOD,
             MethodAvailability::Available,
             Some("identity.campaign.v1"),
-            Some("module.adapter-runtime@1"),
-            "Host-private laboratory credentials drive login, MFA, recovery, token lifecycle, ownership, role, adjacent-route, and tenant differential oracles; federated identity and application-specific permissions remain explicit gaps.",
+            Some("module.worker@1"),
+            "Module-private laboratory credentials drive login, MFA, recovery, token lifecycle, ownership, role, adjacent-route, and tenant differential oracles; federated identity and application-specific permissions remain explicit gaps.",
         ),
         (
             FILE_FUZZ_METHOD,
             MethodAvailability::Available,
             Some("file-fuzz.campaign.v1"),
-            Some("module.adapter-runtime@1"),
-            "Host-owned path, link, temporary-file, permission, TAR, structured-parser, deterministic fuzz, minimization, resource, and Linux native-child fault campaign; arbitrary grammars and compiler sanitizers require separately registered target profiles.",
+            Some("module.worker@1"),
+            "Module-owned path, link, temporary-file, permission, TAR, structured-parser, deterministic fuzz, minimization, resource, and Linux native-child fault campaign; arbitrary grammars and compiler sanitizers require separately registered target profiles.",
         ),
         (
             WORKFLOW_STATE_METHOD,
             MethodAvailability::Available,
             Some("workflow-state.campaign.v1"),
-            Some("module.adapter-runtime@1"),
-            "Host-owned documented/proposed invariant separation, ordered real actions, copied-state observations, retries, cancellation, crash recovery, quota/accounting oracles, and one deterministic concurrency schedule; application-specific contracts and distributed systems require separate profiles.",
+            Some("module.worker@1"),
+            "Module-owned documented/proposed invariant separation, ordered real actions, copied-state observations, retries, cancellation, crash recovery, quota/accounting oracles, and one deterministic concurrency schedule; application-specific contracts and distributed systems require separate profiles.",
         ),
         (
             BOUNDARY_AUTHORITY_METHOD,
             MethodAvailability::Available,
             Some("boundary-authority.campaign.v1"),
-            Some("module.adapter-runtime@1"),
-            "Host-owned Unix-socket DNS/HTTP/TLS peers, lab-only certificates, deny-all IP networking, contained privilege probes, policy checks, and copied-application authority cases; live cloud/provider and host-privileged checks remain blocked without a purpose-built emulator.",
+            Some("module.worker@1"),
+            "Module-owned Unix-socket DNS/HTTP/TLS peers, lab-only certificates, deny-all IP networking, contained privilege probes, policy checks, and copied-application authority cases; live cloud/provider and host-privileged checks remain blocked without a purpose-built emulator.",
         ),
         (
             ATTACK_GRAPH_METHOD,
             MethodAvailability::Available,
             Some("attack-graph.campaign.v1"),
-            Some("module.adapter-runtime@1"),
-            "Host-composed receipt-backed chain search across exact source, private HTTP, and isolated Chromium with counterfactual prerequisite removal, unsupported-edge rejection, root-cause grouping, exact copy-only diff, and adapter-specific repair replays; other adapter combinations require registered graph profiles.",
+            Some("module.worker@1"),
+            "Module-composed receipt-backed chain search across exact source, private HTTP, and isolated Chromium with counterfactual prerequisite removal, unsupported-edge rejection, root-cause grouping, exact copy-only diff, and adapter-specific repair replays; other adapter combinations require registered graph profiles.",
         ),
         (
             CANARY_METHOD,
             MethodAvailability::Available,
             Some("linux.canary-disclosure.v1"),
-            Some("module.owned-jobs@1"),
+            Some("module.worker@1"),
             "Linux command-line/native targets only; proves one exact hidden-canary disclosure case.",
         ),
         (

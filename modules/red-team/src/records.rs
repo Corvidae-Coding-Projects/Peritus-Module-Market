@@ -38,7 +38,7 @@ pub enum RecordKind {
     CoverageCell,
     /// One falsifiable security claim awaiting or carrying evidence.
     Hypothesis,
-    /// One host-owned asynchronous operation.
+    /// One retained module worker operation.
     Job,
     /// One content-addressed observation or receipt.
     Evidence,
@@ -452,7 +452,7 @@ pub struct HypothesisRecord {
     pub supersedes: Option<RecordId>,
 }
 
-/// Observed lifecycle of one host-owned job.
+/// Observed lifecycle of one module worker operation.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum JobState {
@@ -470,7 +470,7 @@ pub enum JobState {
     Indeterminate,
 }
 
-/// Durable observation of one future host-owned job.
+/// Durable observation of one future module worker operation.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct JobRecord {
@@ -502,19 +502,19 @@ pub struct JobRecord {
 pub enum EvidenceKind {
     /// Exact source file/range observation.
     Source,
-    /// Host-authored deterministic analysis over exact immutable source bytes.
+    /// Module-authored deterministic analysis over exact immutable source bytes.
     Analysis,
-    /// Host-captured HTTP/API traffic and copied-state oracle evidence.
+    /// Module-captured HTTP/API traffic and copied-state oracle evidence.
     HttpApi,
-    /// Host-captured real-browser, client-state, traffic, screenshot and trace evidence.
+    /// Module-captured real-browser, client-state, traffic, screenshot and trace evidence.
     BrowserClient,
-    /// Host-captured authentication, session, authorization, tenancy, and redaction evidence.
+    /// Module-captured authentication, session, authorization, tenancy, and redaction evidence.
     IdentityAccess,
-    /// Host-captured filesystem, archive, parser, fuzzing, and native-fault evidence.
+    /// Module-captured filesystem, archive, parser, fuzzing, and native-fault evidence.
     FileFuzz,
-    /// Host-captured stateful workflow, schedule, retry, and business-invariant evidence.
+    /// Module-captured stateful workflow, schedule, retry, and business-invariant evidence.
     WorkflowState,
-    /// Host-captured private-network, TLS, privilege-policy, and delegated-authority evidence.
+    /// Module-captured private-network, TLS, privilege-policy, and delegated-authority evidence.
     BoundaryAuthority,
     /// Host-composed cross-adapter graph, counterfactual, and repair replay evidence.
     AttackGraph,

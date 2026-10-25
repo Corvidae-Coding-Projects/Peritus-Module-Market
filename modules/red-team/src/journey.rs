@@ -2,9 +2,8 @@
 
 use crate::{Error, invalid, reply, state, state::JourneyStepState};
 use peritus_plugin_sdk::{
-    HOST_CAPABILITY_ADAPTER_RUNTIME, HOST_CAPABILITY_APPLICATION_LABORATORY,
-    HOST_CAPABILITY_SCOPED_SOURCE, ModuleAction, ModuleHostProfile, ModuleLaboratoryPhase,
-    ModuleMenuAction,
+    HOST_CAPABILITY_APPLICATION_LABORATORY, HOST_CAPABILITY_SCOPED_SOURCE, HOST_CAPABILITY_WORKER,
+    ModuleAction, ModuleHostProfile, ModuleLaboratoryPhase, ModuleMenuAction,
 };
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -101,7 +100,7 @@ fn start(
         .clone();
     let missing = [
         HOST_CAPABILITY_SCOPED_SOURCE,
-        HOST_CAPABILITY_ADAPTER_RUNTIME,
+        HOST_CAPABILITY_WORKER,
         HOST_CAPABILITY_APPLICATION_LABORATORY,
     ]
     .into_iter()
@@ -130,7 +129,7 @@ fn start(
     };
     state::save(parameters, state)?;
     Ok(reply(
-        "The Phase 20 campaign is ready. It will run one host-owned operation at a time, preserving live pause, steering, partial export, restart recovery, explicit gaps, and cleanup controls. Select Continue to begin.",
+        "The Phase 20 campaign is ready. It will run one module-owned operation at a time, preserving live pause, steering, partial export, restart recovery, explicit gaps, and cleanup controls. Select Continue to begin.",
         profile,
         super::actions(state),
         None,
@@ -257,7 +256,7 @@ fn reconcile(state: &mut state::State) -> Result<(), Error> {
         });
     }
     state.journey.steps[cursor].state = JourneyStepState::Complete;
-    state.journey.steps[cursor].detail = "Required host-authored evidence was retained.".into();
+    state.journey.steps[cursor].detail = "Required module-authored evidence was retained.".into();
     state.journey.cursor += 1;
     Ok(())
 }

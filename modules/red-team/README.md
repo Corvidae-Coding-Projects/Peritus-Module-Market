@@ -68,8 +68,8 @@ revision from being installed accidentally.
 
 The shortest useful workflow is:
 
-1. **Check compatibility**. Red Team should report scoped source, private state, checkpoints, and
-   contained jobs as available.
+1. **Check compatibility**. Red Team should report scoped source, private state, checkpoints,
+   disposable laboratories, and isolated module workers as available.
 2. **Scope current workspace**. This creates an inert immutable snapshot; it does not execute the
    project.
 3. Select **Install static analyzers**, then **Analyze scoped source** to collect deterministic
@@ -109,14 +109,33 @@ After `start`, the module coordinates this sequence:
 2. Map security families to concrete application surfaces and leave unsupported areas visibly
    unexamined or blocked.
 3. Register small falsifiable hypotheses before execution.
-4. Run only supported proofs through host-owned contained adapters with finite resources, cleared
-   credentials, deny-all proof-time networking, and host-authored receipts.
+4. Run supported proofs through Red Team's own adapters inside generic Peritus worker containment,
+   with finite resources, cleared credentials, deny-all ambient networking, and module-authored
+   receipts derived from observed target bytes and copied state.
 5. Give the raw evidence and counterevidence to a separately persisted skeptic.
 6. For confirmed findings, propose root-cause fixes in disposable copies and replay attack,
    legitimate, malformed, and adjacent cases.
 7. Give the exact diff and replay receipts to an independent patch reviewer.
 8. Compare the original workspace with its starting byte-and-executable-mode manifest before
    publishing delivery artifacts.
+
+### Where the implementation lives
+
+All security behavior lives in this module:
+
+- adapter registration, preparation, execution, and receipt decoding;
+- source-analysis rules and dependency/configuration/secret observations;
+- HTTP/API, browser, identity/access, file/parser, workflow/state, boundary/authority, and
+  attack-graph campaign implementations;
+- target entrypoint selection, private Unix transport, target state oracles, canaries, Chromium
+  setup, skeptic decisions, repair replay, and report generation; and
+- the private Rust contracts that describe those observations.
+
+Peritus does not know these adapter names or evidence schemas. It exposes only generic module
+discovery and lifecycle, scoped-source capture, source builds, persistent module state, complete
+disposable source copies, bounded opaque worker execution, original-source verification, and shared
+TUI/WebUI transport. This separation lets the Red Team module evolve or be replaced without adding
+security-class code to Peritus itself.
 
 Dependency preparation is separate from proof execution. A campaign may fetch an explicitly
 declared, digest-pinned public HTTPS dependency during preparation; contained proof jobs do not gain
@@ -138,8 +157,8 @@ Pause and resume from either interface, or use:
 ```
 
 Pause preserves the source snapshot, observations, hypotheses, receipts, findings, patch plans, and
-current stage. An already submitted host job remains host-owned; inspect **Contained jobs** and
-cancel its exact identity if needed.
+current stage. A submitted module worker remains bounded by the current Peritus call; cancel the
+active Peritus run if that worker must be stopped.
 
 If the client disconnects, reopen the same Peritus run and use **Investigation status** or `resume`.
 If a retained host request was interrupted, `resume` reissues that exact request instead of starting
@@ -181,7 +200,7 @@ only an admitted host receipt can make that transition.
 
 ## Deterministic source analysis
 
-Phase 12 adds a registered host analyzer that reads only the immutable snapshot created by `scope`:
+Phase 12 adds a registered module analyzer that reads only the immutable snapshot created by `scope`:
 
 ```text
 /module peritus.red-team analyzers
@@ -200,16 +219,16 @@ returned: the receipt includes only type, byte length and a digest fingerprint.
 Each dependency is labeled `runtime_referenced`, `test_only`, `unreachable`, or `unknown` from the
 captured source. Every analyzer result is labeled `source_lead`, including critical-looking rules.
 Dead code, test fixtures, unreachable advisories and scanner-shaped JSON inside the target cannot
-become `confirmed`; that state still requires a separate host-owned real-interface receipt and
+become `confirmed`; that state still requires a separate module-authored real-interface receipt and
 independent review. The report retains the exact analyzer, rule and advisory versions, redacted raw
 matches and their digest, deduplicated root causes, scanned source identity, skipped/truncated
 counts and explicit semantic-analysis gaps.
 
 ## Managed adapter lifecycle
 
-Current Peritus hosts advertise a typed adapter registry separately from unrestricted developer
-tools. Phase 10 includes one harmless diagnostic adapter so you can inspect the lifecycle before
-later security adapters rely on it:
+The Red Team module owns its typed adapter registry separately from Peritus developer tools. The
+module includes one harmless diagnostic adapter so you can inspect the lifecycle before security
+adapters rely on it:
 
 ```text
 /module peritus.red-team adapters
@@ -220,11 +239,12 @@ later security adapters rely on it:
 /module peritus.red-team adapter-remove
 ```
 
-Installation stages exact host-registered bytes, verifies their digest and platform, and records a
-content-addressed runtime identity plus host-authored provenance. Reinstalling identical bytes reuses
-that identity. Removal deletes the private runtime bytes while retaining the historical identity and
-provenance. An older host reports the missing `module.adapter-runtime@1` capability and does not fall
-back to `PATH`, a shell command, or a caller-supplied executable.
+Installation stages exact module-registered bytes, verifies their digest and platform, and records a
+content-addressed runtime identity plus module-authored provenance. Reinstalling identical bytes
+reuses that identity. Removal deletes the module-private runtime bytes while retaining the historical
+identity and provenance. A host without the generic `module.worker@1` service reports the missing
+capability and the module does not fall back to `PATH`, a shell command, or a caller-supplied
+executable.
 
 To inspect cancellation explicitly, use `adapter-stage diagnostic`, followed by `adapter-cancel`.
 `adapter-complete` finishes a retained staged preparation after a reconnect or daemon restart. These
@@ -235,8 +255,8 @@ tested.
 
 The default laboratory copies the complete selected immutable source tree into private resettable
 storage. The target does not need to contain special files, implement a Peritus protocol, emit
-readiness JSON, or expose a fake state service. Peritus discovers common entry points and can run an
-explicit real entry point with a host-resolved runtime, literal argv, bounded stdin, cleared
+readiness JSON, or expose a fake state service. The Red Team module discovers common entry points and
+can run an explicit real entry point with a module-selected runtime, literal argv, bounded stdin, cleared
 credential-free environment, denied proof-time networking, process-tree containment, and a
 predeclared exit/output oracle. Static analysis still runs when a repository has no executable
 surface or its required toolchain is unavailable; that dynamic limitation is recorded as a gap,
@@ -260,15 +280,15 @@ Run the source-bound path after opening the application repository and selecting
 `lab-run-auto` uses the highest-confidence entry point discovered from the copied source. Use
 `lab-run RUNTIME ENTRYPOINT [ARGS...]` when the repository has a different entry point. For exact
 stdin, environment, exit codes, and stdout/stderr fragments, use `lab-run-json` with the
-`ModuleLaboratoryProcessInput` shape. Supported host runtime families are `direct`, `python3`,
+`ModuleLaboratoryProcessInput` shape. Supported module runtime families are `direct`, `python3`,
 `node`, `bash`, `ruby`, `php`, `perl`, `cargo`, `go`, `java`, `dotnet`, and `make`; availability is
-reported from the actual host. These names select host-owned runtime adapters, not arbitrary shell
-commands, and no argument receives shell parsing or expansion.
+reported from the actual worker environment. These names select module-owned runtime launchers, not
+arbitrary shell commands, and no argument receives shell parsing or expansion.
 
 ## Compatibility laboratory fixtures
 
 The older Phase 11 fixture recipes copy two exact files, launch a controlled application/backing
-store pair, and return opaque identities plus host-authored receipts. They exist to qualify the
+store pair, and return opaque identities plus module-authored receipts. They exist to qualify the
 HTTP, browser, identity, parser, workflow, boundary, and graph adapters. They are not a requirement
 on user applications and their results are never a substitute for testing the selected source.
 
@@ -303,10 +323,10 @@ container runtime.
 
 ## Test a real HTTP/API laboratory
 
-Phase 13 registers `peritus.http-api`, a content-addressed host adapter that can address only a ready
-`linux.python-http-api.v1` disposable laboratory. The module receives opaque identities; the host
-resolves the private Unix socket, emits and captures the wire bytes, reads copied target state, and
-redacts the laboratory-only secret before returning evidence.
+Phase 13 registers `peritus.http-api`, a content-addressed module adapter that can address only a ready
+`linux.python-http-api.v1` disposable laboratory. The module receives opaque generic laboratory
+identities; its worker resolves the private Unix socket, emits and captures wire bytes, reads copied
+target state, and redacts laboratory-only secrets before returning evidence.
 
 Point the laboratory at two regular files in the captured target snapshot: a controller and its API
 service. For a target whose files are `application.py` and `service.py`, run:
@@ -332,7 +352,7 @@ paths only when the Peritus Module Market repository itself is the scoped target
 resources are never silently added to another project's execution scope. Each campaign imports the live OpenAPI document,
 records discovered routes and parameters, then sends pinned ordinary and adversarial REST, OpenAPI,
 GraphQL, WebSocket, and JSON-RPC requests. It distinguishes `passed`, `rejected`, `unreachable`, and
-`violation`; only a violation independently established by a host response/state oracle becomes a
+`violation`; only a violation independently established by a module response/state oracle becomes a
 `runtime_confirmed` finding. Rejected input is not called unreachable, a 404 is not called safe, and
 an imported schema or target-authored message is never its own oracle.
 
@@ -346,7 +366,7 @@ multi-tenant differentials, GraphQL subscriptions, and WebSocket extensions rema
 ## Test browser and client trust
 
 Phase 14 registers `peritus.browser-client`. It can address only the exact ready
-`linux.python-http-api.v1` laboratory selected by its opaque handles. Peritus creates isolated
+`linux.python-http-api.v1` laboratory selected by its opaque handles. The module creates isolated
 Chromium contexts, exposes the copied service through two temporary loopback origins, and runs a
 pinned action graph. The module cannot choose a URL, attach to a user's browser, or inherit browser
 profiles, cookies, credentials, extensions, or downloads.
@@ -365,7 +385,7 @@ After the Phase 13 laboratory has been created, prepared, and launched, run:
 The campaign exercises ordinary navigation, traditional and client-rendered crawling, reflected,
 stored, and DOM script execution, CSP enforcement, cookie flags, cross-origin mutation, CSRF,
 server-side validation, uploads, downloads, off-scope request blocking, and fresh-context replay.
-The host correlates browser effects with its own copied-state oracle rather than trusting page text.
+The module correlates browser effects with its own copied-state oracle rather than trusting page text.
 It retains content-addressed screenshots, a Playwright trace, traffic metadata, and exact upload and
 download bytes. Reset the laboratory and run `browser-run` again to obtain a new bounded campaign;
 an interrupted request with the same durable identity reuses its completed observation.
@@ -378,7 +398,7 @@ authenticated workflow; those remain visible gaps.
 ## Test authentication, sessions, authorization, and tenancy
 
 Phase 15 registers `peritus.identity-access` for a ready copied multi-user HTTP laboratory. The
-host creates and holds every credential, resolves them only while sending an exact request to the
+module creates and holds every credential, resolves them only while sending an exact request to the
 selected private service, and gives the module opaque identity and session handles. Neither the
 provider prompt nor the public campaign receipt contains passwords, factors, recovery tokens, or
 session-token bytes.
@@ -408,7 +428,7 @@ same-tenant, and cross-tenant identities. It exercises login, MFA challenge and 
 logout, rotation, expiry, revocation, concurrent-session revocation, and recovery, together with
 owned-object access, object-identifier mutation, vertical privilege, cross-tenant access, and an
 adjacent private route. Expected denials remain distinct from demonstrated violations and from
-indeterminate infrastructure outcomes. A target response never decides its own verdict: the host
+indeterminate infrastructure outcomes. A target response never decides its own verdict: the module
 correlates response bytes with copied-state observations and the expected role, tenant, ownership,
 and session transition.
 
@@ -436,12 +456,12 @@ explicit `lab-create-http` paths), then install and run the adapter:
 /module peritus.red-team file-fuzz-history
 ```
 
-The host submits real uploads, predictable-temporary operations, TAR records, valid and malformed
-`PH16` grammar inputs, and a child-only native-FFI fault token. Fixed host-private canaries decide
+The module submits real uploads, predictable-temporary operations, TAR records, valid and malformed
+`PH16` grammar inputs, and a child-only native-FFI fault token. Fixed module-private canaries decide
 path traversal, symbolic-link, temporary-file, permission, and archive effects. Exact inputs are
 retained as bounded base64 with digests; generated failures are minimized and deduplicated before
 reporting. The controller records resource use, response/state identities, native signals, and
-host-observed behavioral edges. Those edges are deliberately not described as compiler source
+module-observed behavioral edges. Those edges are deliberately not described as compiler source
 coverage.
 
 Run the matched negative control with `lab-create file-safe`. Hostile cases must be rejected, the
@@ -469,7 +489,7 @@ and run the adapter:
 /module peritus.red-team workflow-history
 ```
 
-The host drives real create, approve, charge, duplicate, replay, ambiguous retry, cancel,
+The module drives real create, approve, charge, duplicate, replay, ambiguous retry, cancel,
 crash/recovery, quota, and deterministic two-worker operations. It reads the copied state file
 before and after every action and retains the exact identity, request, order, state digests,
 schedule, timing, and replay identity. Documented invariants can support findings; model-proposed
@@ -501,12 +521,12 @@ install and run the adapter:
 /module peritus.red-team boundary-history
 ```
 
-The host creates private Unix-socket DNS, redirect, callback, proxy, and TLS peers plus valid and
+The module creates private Unix-socket DNS, redirect, callback, proxy, and TLS peers plus valid and
 expired laboratory certificates. The target receives only private socket paths and certificate
 bytes; ordinary IP networking remains denied. The campaign distinguishes legitimate private
 traffic from blind SSRF attempts, validates trust, hostname, expiry, downgrade and connection-state
 behavior, attempts contained privilege operations, checks local policy, and tests whether untrusted
-prompt or plugin data can trigger a privileged copied-application action. Host-side peer counters,
+prompt or plugin data can trigger a privileged copied-application action. Module-side peer counters,
 copied state, TLS outcomes, and unchanged host authority are the oracles.
 
 Run the negative control with `lab-create boundary-safe`. It must retain legitimate private DNS,
@@ -521,7 +541,7 @@ Use `boundary-probe-wrong-endpoint` and `boundary-probe-small-budget` to exercis
 Phase 19 registers `peritus.attack-graph`. It composes a real chain from exact source, private
 HTTP, and isolated Chromium observations, then tests both a removed prerequisite and the repaired
 twin. Create and launch the vulnerable twin first, then the safe twin; both remain live while the
-host executes the graph:
+module executes the graph:
 
 ```text
 /module peritus.red-team lab-create http-vulnerable
@@ -535,7 +555,7 @@ host executes the graph:
 /module peritus.red-team graph-history
 ```
 
-The confirmed path must contain evidence from all three registered adapter families. The host also
+The confirmed path must contain evidence from all three registered adapter families. The module also
 stores an ordinary value through the vulnerable service to break the persisted-markup prerequisite
 and prove the browser impact disappears. A deliberately proposed identity/access edge has no raw
 receipt and must be retained as rejected. Root-cause grouping preserves the independently observed
@@ -562,7 +582,7 @@ laboratory order, twin selection, cleanup, or export commands:
 ```
 
 `campaign-plan` shows the fixed plan before any effect. `campaign-start` binds that plan to the
-current immutable source snapshot. Each `campaign-next` dispatches at most one host-owned operation;
+current immutable source snapshot. Each `campaign-next` dispatches at most one module-owned operation;
 invoke it again only after the preceding operation settles. The TUI and browser UI expose the same
 controls and retained progress.
 
@@ -574,7 +594,7 @@ than counting it as complete. Use `campaign-retry` after correcting a prerequisi
 `campaign-skip` to retain an explicit coverage gap and continue independent work.
 
 `campaign-abort` converts every still-live laboratory into a one-at-a-time cleanup plan. Continue
-until each one has a host-authored torn-down receipt. `campaign` shows every planned, waiting,
+until each one has a module-authored torn-down receipt. `campaign` shows every planned, waiting,
 completed, skipped, or blocked step plus retained steering and failures. Partial reports remain
 available throughout. Completion exports Markdown, JSON, SARIF 2.1.0, exact patch artifacts, and a
 replay bundle. It means the registered profiles completed or were explicitly recorded as gaps; it
@@ -680,14 +700,14 @@ is a separate user-controlled action.
 | `lab-snapshot`, `lab-reset`, `lab-stop`, `lab-teardown` | Preserve state evidence, restore an empty store, terminate the process tree, and remove disposable bytes. |
 | `findings` | Show skeptical classifications and bound evidence. |
 | `patches` | Show patch lifecycle, exact diffs, replay cases, and reviews. |
-| `jobs` | List contained host-owned jobs and their current states. |
+| `jobs` | List contained module worker operations and their current states. |
 | `report`, `report-json`, `sarif`, `bundle` | Export the current evidence-backed Markdown, JSON, SARIF, or replay delivery. |
 | `revoke` | Revoke the current source authority and cancel dependent work. |
 | `compatibility` | Explain which required host capabilities are available or missing. |
 | `contract` | Display the source, execution, evidence, repair, and original-preservation contract. |
 | `checkpoint` | Publish a durable investigation checkpoint. |
 
-The low-level `observe`, `prepare`, `probe`, `job`, `job-log`, and `job-cancel` commands are mainly
+The low-level `observe`, `probe`, `job`, `job-log`, and `job-cancel` commands are mainly
 for focused manual replay and diagnosis. Normal investigations should let the coordinator schedule
 them so hypotheses, authority, receipts, and reviews remain connected.
 
@@ -729,22 +749,22 @@ security guarantee.
 - Network and credential access are denied during proof execution.
 - Application laboratories use opaque service, endpoint, identity, and secret handles; target-only
   secret bytes are quarantined if they appear in target output.
-- HTTP/API campaigns can reach only an exact ready disposable-laboratory handle. The host owns the
+- HTTP/API campaigns can reach only an exact ready disposable-laboratory handle. The module owns the
   private route, traffic capture, state oracle, secret redaction, resource bounds, and receipt.
-- Browser campaigns can reach only two host-created loopback bridges to that exact private service.
+- Browser campaigns can reach only two module-created loopback bridges to that exact private service.
   They use fresh managed profiles, block off-scope requests, retain bounded evidence, and never
   attach to an ambient user browser.
-- Identity/access campaigns can use only host-generated credentials for the exact selected
+- Identity/access campaigns can use only module-generated credentials for the exact selected
   laboratory and registered topology. Public receipts contain opaque identity/session handles and
   redaction facts, while role, tenant, ownership, response, and copied-state observations remain
-  independently correlated by the host.
+  independently correlated by the module.
 - Static analysis reads only immutable scoped-source artifacts under host-enforced file and byte
   bounds; it cannot execute target code and cannot promote a source lead to runtime confirmation.
 - Active laboratory process trees are cancelled when run authority, required permissions, selected
   source authority, or the installed module identity is revoked.
 - Patches are created and tested only in disposable copies.
 - The original workspace is checked again before final delivery.
-- macOS, Windows, other architectures, and security properties without a suitable host adapter are
+- macOS, Windows, other architectures, and security properties without a suitable module adapter are
   not claimed tested by the current Linux recipe.
 
 For implementation details and the retained acceptance history, see the

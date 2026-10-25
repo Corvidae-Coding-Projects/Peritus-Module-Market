@@ -2,11 +2,12 @@
 
 use crate::{Error, invalid, reply, state, state::PendingRequest};
 use peritus_plugin_sdk::{
-    HOST_CAPABILITY_ADAPTER_RUNTIME, ModuleAction, ModuleAdapterCancelRequest,
-    ModuleAdapterCatalog, ModuleAdapterCompleteRequest, ModuleAdapterExecuteRequest,
-    ModuleAdapterExecutionReceipt, ModuleAdapterPhase, ModuleAdapterPreparationHandle,
-    ModuleAdapterPrepareRequest, ModuleAdapterRemoveRequest, ModuleAdapterRuntimeIdentity,
-    ModuleAdapterStatus, ModuleAdapterStatusRequest, ModuleHostProfile, ModuleHostRequest,
+    HOST_CAPABILITY_WORKER, MODULE_WORKER_FEATURE_BROWSER_AUTOMATION, ModuleAction,
+    ModuleAdapterCancelRequest, ModuleAdapterCatalog, ModuleAdapterCompleteRequest,
+    ModuleAdapterExecuteRequest, ModuleAdapterExecutionReceipt, ModuleAdapterPhase,
+    ModuleAdapterPreparationHandle, ModuleAdapterPrepareRequest, ModuleAdapterRemoveRequest,
+    ModuleAdapterRuntimeIdentity, ModuleAdapterStatus, ModuleAdapterStatusRequest,
+    ModuleHostProfile, ModuleHostRequest, ModuleWorkerLimits, ModuleWorkerRequest,
 };
 use serde_json::{Value, json};
 
@@ -37,7 +38,7 @@ pub(crate) fn command(
 ) -> Result<ModuleAction, Error> {
     if !supports(profile) {
         return Ok(reply(
-            "This Peritus host does not advertise `module.adapter-runtime@1`. Managed adapters remain blocked; no ambient executable or command fallback was attempted.",
+            "This Peritus host does not advertise generic isolated module workers. Managed adapters remain blocked; no ambient executable or command fallback was attempted.",
             profile,
             super::actions(state),
             None,
@@ -309,13 +310,13 @@ pub(crate) fn view(state: &state::State) -> String {
         state.adapter_errors.iter().map(|error| format!("- {error}")).collect::<Vec<_>>().join("\n")
     };
     format!(
-        "{catalog}\n\n## Latest lifecycle status\n\n{latest}\n\n## Host-authored execution receipts\n\n{}\n\n## Retained errors\n\n{errors}",
+        "{catalog}\n\n## Latest lifecycle status\n\n{latest}\n\n## Module-authored execution receipts\n\n{}\n\n## Retained errors\n\n{errors}",
         state.adapter_receipts.len()
     )
 }
 
 pub(crate) fn supports(profile: &Option<ModuleHostProfile>) -> bool {
-    profile.as_ref().is_some_and(|profile| profile.supports(HOST_CAPABILITY_ADAPTER_RUNTIME, 1))
+    profile.as_ref().is_some_and(|profile| profile.supports(HOST_CAPABILITY_WORKER, 1))
 }
 
 fn request_catalog(
@@ -351,17 +352,124 @@ fn service(
         _ => return Err(invalid("non-adapter request reached adapter service")),
     };
     let key = pending.key().to_owned();
+    let source = state
+        .active_handle()
+        .ok_or_else(|| invalid("capture source before using a Red Team module worker"))?;
+    let source_snapshot = state
+        .active_snapshot()
+        .ok_or_else(|| invalid("capture source before using a Red Team module worker"))?
+        .snapshot_digest
+        .clone();
+    let runtime_features = worker_runtime_features(&pending);
+    let limits = worker_limits(&runtime_features);
     state.pending = Some(pending);
     state::save(parameters, state)?;
     Ok(ModuleAction::HostService {
         request: ModuleHostRequest {
-            key,
-            capability: HOST_CAPABILITY_ADAPTER_RUNTIME.into(),
+            key: key.clone(),
+            capability: HOST_CAPABILITY_WORKER.into(),
             version: 1,
-            operation: operation.into(),
-            input,
+            operation: "execute".into(),
+            input: serde_json::to_value(ModuleWorkerRequest {
+                schema: 1,
+                source,
+                worker: "adapter-runtime".into(),
+                input: json!({
+                    "request_key": key,
+                    "operation": operation,
+                    "request": input,
+                    "source_snapshot": source_snapshot,
+                    "targets": state.runtime_targets,
+                }),
+                runtime_features,
+                limits,
+            })?,
         },
     })
+}
+
+pub(crate) fn resume_worker(
+    state: &state::State,
+    pending: &PendingRequest,
+) -> Result<ModuleAction, Error> {
+    let (operation, input) = match pending {
+        PendingRequest::AdapterCatalog { .. } => ("catalog", json!({})),
+        PendingRequest::AdapterPrepare { request, .. } => {
+            ("prepare", serde_json::to_value(request)?)
+        }
+        PendingRequest::AdapterComplete { request, .. } => {
+            ("complete", serde_json::to_value(request)?)
+        }
+        PendingRequest::AdapterCancel { request, .. } => ("cancel", serde_json::to_value(request)?),
+        PendingRequest::AdapterStatus { request, .. } => ("status", serde_json::to_value(request)?),
+        PendingRequest::AdapterRemove { request, .. } => ("remove", serde_json::to_value(request)?),
+        PendingRequest::AdapterExecute { request, .. } => {
+            ("execute", serde_json::to_value(request)?)
+        }
+        _ => return Err(invalid("non-adapter request reached adapter worker resume")),
+    };
+    let source = state
+        .active_handle()
+        .ok_or_else(|| invalid("captured source authority is unavailable for worker resume"))?;
+    let source_snapshot = state
+        .active_snapshot()
+        .ok_or_else(|| invalid("captured source snapshot is unavailable for worker resume"))?
+        .snapshot_digest
+        .clone();
+    let runtime_features = worker_runtime_features(pending);
+    let limits = worker_limits(&runtime_features);
+    Ok(ModuleAction::HostService {
+        request: ModuleHostRequest {
+            key: pending.key().to_owned(),
+            capability: HOST_CAPABILITY_WORKER.into(),
+            version: 1,
+            operation: "execute".into(),
+            input: serde_json::to_value(ModuleWorkerRequest {
+                schema: 1,
+                source,
+                worker: "adapter-runtime".into(),
+                input: json!({
+                    "request_key": pending.key(),
+                    "operation": operation,
+                    "request": input,
+                    "source_snapshot": source_snapshot,
+                    "targets": state.runtime_targets,
+                }),
+                runtime_features,
+                limits,
+            })?,
+        },
+    })
+}
+
+fn worker_runtime_features(pending: &PendingRequest) -> Vec<String> {
+    let PendingRequest::AdapterExecute { request, .. } = pending else {
+        return Vec::new();
+    };
+    if matches!(
+        request.runtime.adapter_id.as_str(),
+        crate::browser_client::ADAPTER_ID | crate::attack_graph::ADAPTER_ID
+    ) {
+        vec![MODULE_WORKER_FEATURE_BROWSER_AUTOMATION.into()]
+    } else {
+        Vec::new()
+    }
+}
+
+fn worker_limits(runtime_features: &[String]) -> ModuleWorkerLimits {
+    let browser_automation =
+        runtime_features.iter().any(|feature| feature == MODULE_WORKER_FEATURE_BROWSER_AUTOMATION);
+    ModuleWorkerLimits {
+        wall_millis: 300_000,
+        // Browser workers need a larger resident-memory ceiling than the ordinary adapters.
+        memory_bytes: if browser_automation { 2 * 1024 * 1024 * 1024 } else { 1024 * 1024 * 1024 },
+        storage_bytes: 2 * 1024 * 1024 * 1024,
+        // Linux accounts Chromium's helper processes and threads against the same pids cgroup.
+        // Leave ordinary adapters tightly bounded, while allowing the browser engine enough
+        // headroom to initialize and execute the retained campaign under the 2 GiB memory cap.
+        processes: if browser_automation { 512 } else { 64 },
+        open_handles: if browser_automation { 1_024 } else { 64 },
+    }
 }
 
 pub(crate) fn installed_runtime(

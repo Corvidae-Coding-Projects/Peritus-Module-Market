@@ -7,6 +7,6 @@ mutation, CSRF, validation, traditional/client-rendered crawl, download and uplo
 vulnerable twin admits the pinned protocol and browser/client-trust violations.
 
 The host supplies the private Unix socket, copied state store and target-only canary. Corpus output
-is untrusted; decisions come from host-captured protocol/browser effects and copied-state readback.
+is untrusted; decisions come from module-captured protocol/browser effects and copied-state readback.
 
 [Parent waypoint](../AGENTS.md).

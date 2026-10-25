@@ -36,7 +36,7 @@ pub(crate) fn command(
 ) -> Result<ModuleAction, Error> {
     if !adapter::supports(profile) {
         return Ok(reply(
-            "This Peritus host does not advertise `module.adapter-runtime@1`. Static analysis remains blocked; no ambient scanner, executable or source path was used.",
+            "This Peritus host does not advertise generic isolated module workers. Static analysis remains blocked; no ambient scanner, executable or source path was used.",
             profile,
             super::actions(state),
             None,
@@ -86,9 +86,9 @@ pub(crate) fn admit(
 ) -> Result<ModuleAction, Error> {
     if receipt.operation != OPERATION
         || receipt.receipt_decoder != RECEIPT_DECODER
-        || receipt.executed_by != "peritus-host/source-analysis-v1"
+        || receipt.executed_by != "peritus-red-team/source-analysis@1"
     {
-        return Err(invalid("static-analysis receipt has an unregistered host identity"));
+        return Err(invalid("static-analysis receipt has an unregistered module runtime identity"));
     }
     let observation: ModuleSourceAnalysisObservation =
         serde_json::from_value(receipt.observation.clone())?;
@@ -109,7 +109,7 @@ pub(crate) fn admit(
         scope_revision: scope.id.clone(),
         kind: EvidenceKind::Analysis,
         observation: format!(
-            "Host static analyzer set {} examined {} immutable files and emitted {} source-only leads",
+            "Module-owned static analyzer set {} examined {} immutable files and emitted {} source-only leads",
             observation.analyzer_set_version,
             observation.scanned_files,
             observation.findings.len()

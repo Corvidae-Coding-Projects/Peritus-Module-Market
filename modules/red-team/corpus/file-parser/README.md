@@ -1,6 +1,6 @@
 # File, archive, parser, and native-fault twins
 
-These source fixtures are launched only in a host-owned disposable Linux laboratory. Both twins
+These source fixtures are launched only in a module-owned target runtime inside a disposable Linux worker. Both twins
 support ordinary file upload, TAR extraction, and the small `PH16` length-prefixed grammar. The
 vulnerable twin also demonstrates path traversal, symbolic-link following, predictable temporary
 files, permission changes, archive traversal, malformed-parser failure, and a child-only native

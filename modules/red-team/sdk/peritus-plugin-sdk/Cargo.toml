@@ -1,0 +1,18 @@
+[package]
+name = "peritus-red-team-plugin-sdk"
+description = "Private wire and Red Team evidence contracts for the self-contained Red Team module"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+toml.workspace = true
+
+[lints]
+workspace = true

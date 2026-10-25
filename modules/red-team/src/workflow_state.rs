@@ -40,7 +40,7 @@ pub(crate) fn command(
 ) -> Result<ModuleAction, Error> {
     if !adapter::supports(profile) {
         return Ok(reply(
-            "This Peritus host does not advertise `module.adapter-runtime@1`. Stateful workflow and concurrency testing remains blocked; no raw command fallback was attempted.",
+            "This Peritus host does not advertise generic isolated module workers. Stateful workflow and concurrency testing remains blocked; no raw command fallback was attempted.",
             profile,
             super::actions(state),
             None,
@@ -61,7 +61,7 @@ pub(crate) fn command(
                 .last()
                 .filter(|status| status.phase == ModuleLaboratoryPhase::Ready)
                 .ok_or_else(|| invalid("launch a ready workflow laboratory first"))?;
-            if laboratory.handle.recipe_id != "linux.python-http-api.v1" {
+            if !crate::laboratory::has_runtime_target(state, &laboratory.handle.laboratory_id) {
                 return Err(invalid(
                     "the current laboratory does not expose the registered workflow interface",
                 ));
@@ -104,9 +104,9 @@ pub(crate) fn admit(
 ) -> Result<ModuleAction, Error> {
     if receipt.operation != OPERATION
         || receipt.receipt_decoder != RECEIPT_DECODER
-        || receipt.executed_by != "peritus-host/workflow-state-v1"
+        || receipt.executed_by != "peritus-red-team/workflow-state@1"
     {
-        return Err(invalid("workflow/state receipt has an unregistered host identity"));
+        return Err(invalid("workflow/state receipt has an unregistered module runtime identity"));
     }
     let observation: ModuleWorkflowObservation = serde_json::from_value(receipt.observation)?;
     validate_observation(state, &observation)?;
@@ -126,7 +126,7 @@ pub(crate) fn admit(
         scope_revision: scope.id.clone(),
         kind: EvidenceKind::WorkflowState,
         observation: format!(
-            "Host workflow adapter executed {} real actions across {} retained sequences, evaluated {} provenance-labelled invariants, and confirmed {} documented violations",
+            "Module-owned workflow adapter executed {} real actions across {} retained sequences, evaluated {} provenance-labelled invariants, and confirmed {} documented violations",
             observation.actions_executed,
             observation.sequences.len(),
             observation.invariants.len(),
@@ -343,7 +343,7 @@ fn count(
 
 fn view(state: &state::State) -> String {
     format!(
-        "# Stateful workflow and concurrency adapter family\n\n- Registered adapter: `{ADAPTER_ID}`\n- Operation: `{OPERATION}`\n- Installed: {}\n- Retained campaigns: {}\n\nThe host owns documented and proposed invariant provenance, real action order, copied-state reads, duplicate/retry/cancellation/crash-recovery cases, quota/accounting oracles, a deterministic two-worker schedule, and nondeterminism receipts. Proposed invariants and unrelated controller failures cannot create findings.",
+        "# Stateful workflow and concurrency adapter family\n\n- Registered adapter: `{ADAPTER_ID}`\n- Operation: `{OPERATION}`\n- Installed: {}\n- Retained campaigns: {}\n\nThe module owns documented and proposed invariant provenance, real action order, copied-state reads, duplicate/retry/cancellation/crash-recovery cases, quota/accounting oracles, a deterministic two-worker schedule, and nondeterminism receipts. Proposed invariants and unrelated controller failures cannot create findings.",
         adapter::installed_runtime(state, ADAPTER_ID).is_some(),
         state.workflow_observations.len(),
     )

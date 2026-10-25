@@ -1,6 +1,6 @@
 # Stateful workflow and concurrency twins
 
-These source fixtures are launched only in a host-owned disposable Linux laboratory. Both twins
+These source fixtures are launched only in a module-owned target runtime inside a disposable Linux worker. Both twins
 offer a small approval-and-charge workflow with a balance of 100, a two-charge quota, stable
 request identities, cancellation, simulated worker crash/recovery, and a deterministic two-worker
 schedule. The vulnerable twin intentionally permits unapproved and cancelled charges, duplicate

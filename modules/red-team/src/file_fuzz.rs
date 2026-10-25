@@ -41,7 +41,7 @@ pub(crate) fn command(
 ) -> Result<ModuleAction, Error> {
     if !adapter::supports(profile) {
         return Ok(reply(
-            "This Peritus host does not advertise `module.adapter-runtime@1`. File, archive, parser, and native-fault testing remains blocked; no raw command fallback was attempted.",
+            "This Peritus host does not advertise generic isolated module workers. File, archive, parser, and native-fault testing remains blocked; no raw command fallback was attempted.",
             profile,
             super::actions(state),
             None,
@@ -62,7 +62,7 @@ pub(crate) fn command(
                 .last()
                 .filter(|status| status.phase == ModuleLaboratoryPhase::Ready)
                 .ok_or_else(|| invalid("launch a ready file/parser laboratory first"))?;
-            if laboratory.handle.recipe_id != "linux.python-http-api.v1" {
+            if !crate::laboratory::has_runtime_target(state, &laboratory.handle.laboratory_id) {
                 return Err(invalid(
                     "the current laboratory does not expose the registered file/parser interface",
                 ));
@@ -105,9 +105,9 @@ pub(crate) fn admit(
 ) -> Result<ModuleAction, Error> {
     if receipt.operation != OPERATION
         || receipt.receipt_decoder != RECEIPT_DECODER
-        || receipt.executed_by != "peritus-host/file-parser-v1"
+        || receipt.executed_by != "peritus-red-team/file-parser@1"
     {
-        return Err(invalid("file/parser receipt has an unregistered host identity"));
+        return Err(invalid("file/parser receipt has an unregistered module runtime identity"));
     }
     let observation: ModuleFileFuzzObservation = serde_json::from_value(receipt.observation)?;
     validate_observation(state, &observation)?;
@@ -127,7 +127,7 @@ pub(crate) fn admit(
         scope_revision: scope.id.clone(),
         kind: EvidenceKind::FileFuzz,
         observation: format!(
-            "Host file/parser adapter executed {} bounded real operations, retained {} exact cases, and confirmed {} violations or crashes",
+            "Module-owned file/parser adapter executed {} bounded real operations, retained {} exact cases, and confirmed {} violations or crashes",
             observation.resources.operations,
             observation.cases.len(),
             observation.findings.len()
@@ -295,7 +295,7 @@ fn count(observation: &ModuleFileFuzzObservation, disposition: ModuleFileFuzzDis
 
 fn view(state: &state::State) -> String {
     format!(
-        "# File, archive, parser, and native-fault adapter family\n\n- Registered adapter: `{ADAPTER_ID}`\n- Operation: `{OPERATION}`\n- Installed: {}\n- Retained campaigns: {}\n\nThe host owns fixed filesystem canaries, real TAR and structured inputs, deterministic generation and minimization, native child-signal observation, behavioral coverage, resource bounds, and durable replay receipts. Arbitrary commands and compiler toolchains are not accepted from module code.",
+        "# File, archive, parser, and native-fault adapter family\n\n- Registered adapter: `{ADAPTER_ID}`\n- Operation: `{OPERATION}`\n- Installed: {}\n- Retained campaigns: {}\n\nThe module owns fixed filesystem canaries, real TAR and structured inputs, deterministic generation and minimization, native child-signal observation, behavioral coverage, requested inner resource bounds, and durable replay receipts. Peritus generically enforces the outer worker resource ceiling. Arbitrary commands and compiler toolchains are not accepted from module code.",
         adapter::installed_runtime(state, ADAPTER_ID).is_some(),
         state.file_fuzz_observations.len(),
     )

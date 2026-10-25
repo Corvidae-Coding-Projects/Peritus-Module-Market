@@ -40,7 +40,7 @@ pub(crate) fn command(
 ) -> Result<ModuleAction, Error> {
     if !adapter::supports(profile) {
         return Ok(reply(
-            "This Peritus host does not advertise `module.adapter-runtime@1`. Boundary testing remains blocked; no ambient network, TLS, cloud, privilege, or tool fallback was attempted.",
+            "This Peritus host does not advertise generic isolated module workers. Boundary testing remains blocked; no ambient network, TLS, cloud, privilege, or tool fallback was attempted.",
             profile,
             super::actions(state),
             None,
@@ -61,7 +61,7 @@ pub(crate) fn command(
                 .last()
                 .filter(|status| status.phase == ModuleLaboratoryPhase::Ready)
                 .ok_or_else(|| invalid("launch a ready boundary laboratory first"))?;
-            if laboratory.handle.recipe_id != "linux.python-http-api.v1" {
+            if !crate::laboratory::has_runtime_target(state, &laboratory.handle.laboratory_id) {
                 return Err(invalid(
                     "the current laboratory does not expose the registered boundary interface",
                 ));
@@ -102,9 +102,9 @@ pub(crate) fn admit(
 ) -> Result<ModuleAction, Error> {
     if receipt.operation != OPERATION
         || receipt.receipt_decoder != RECEIPT_DECODER
-        || receipt.executed_by != "peritus-host/boundary-authority-v1"
+        || receipt.executed_by != "peritus-red-team/boundary-authority@1"
     {
-        return Err(invalid("boundary receipt has an unregistered host identity"));
+        return Err(invalid("boundary receipt has an unregistered module runtime identity"));
     }
     let observation: ModuleBoundaryObservation = serde_json::from_value(receipt.observation)?;
     validate_observation(state, &observation)?;
@@ -124,7 +124,7 @@ pub(crate) fn admit(
         scope_revision: scope.id.clone(),
         kind: EvidenceKind::BoundaryAuthority,
         observation: format!(
-            "Host boundary adapter executed {} real target operations, retained {} cases including explicit platform blocks, and confirmed {} documented violations without public/LAN/host-loopback or host-privilege effects",
+            "Module-owned boundary adapter executed {} real target operations, retained {} cases including explicit platform blocks, and confirmed {} documented violations without public/LAN/host-loopback or host-privilege effects",
             observation.operations_executed,
             observation.cases.len(),
             observation.findings.len(),
@@ -289,7 +289,7 @@ fn count(observation: &ModuleBoundaryObservation, disposition: ModuleBoundaryDis
 
 fn view(state: &state::State) -> String {
     format!(
-        "# Boundary-authority adapter family\n\n- Registered adapter: `{ADAPTER_ID}`\n- Operation: `{OPERATION}`\n- Installed: {}\n- Retained campaigns: {}\n\nThe host owns private DNS/HTTP/TLS peers, callback receipts, forbidden-destination and certificate oracles, contained privilege attempts, and copied-application authority observations. Public/LAN/host-loopback routing, host privilege, and general model tools are never granted.",
+        "# Boundary-authority adapter family\n\n- Registered adapter: `{ADAPTER_ID}`\n- Operation: `{OPERATION}`\n- Installed: {}\n- Retained campaigns: {}\n\nThe module owns private DNS/HTTP/TLS peers, callback receipts, forbidden-destination and certificate oracles, contained privilege attempts, and copied-application authority observations. Public/LAN/host-loopback routing, host privilege, and general model tools are never granted.",
         adapter::installed_runtime(state, ADAPTER_ID).is_some(),
         state.boundary_observations.len(),
     )

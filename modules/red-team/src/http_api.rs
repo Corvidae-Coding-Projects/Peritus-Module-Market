@@ -40,7 +40,7 @@ pub(crate) fn command(
 ) -> Result<ModuleAction, Error> {
     if !adapter::supports(profile) {
         return Ok(reply(
-            "This Peritus host does not advertise `module.adapter-runtime@1`. HTTP/API testing remains blocked; no ambient endpoint or network fallback was attempted.",
+            "This Peritus host does not advertise generic isolated module workers. HTTP/API testing remains blocked; no ambient endpoint or network fallback was attempted.",
             profile,
             super::actions(state),
             None,
@@ -61,7 +61,7 @@ pub(crate) fn command(
                 .last()
                 .filter(|status| status.phase == ModuleLaboratoryPhase::Ready)
                 .ok_or_else(|| invalid("launch a ready HTTP/API laboratory before `api-run`"))?;
-            if laboratory.handle.recipe_id != "linux.python-http-api.v1" {
+            if !crate::laboratory::has_runtime_target(state, &laboratory.handle.laboratory_id) {
                 return Err(invalid(
                     "the current laboratory does not expose the registered HTTP/API interface",
                 ));
@@ -103,9 +103,9 @@ pub(crate) fn admit(
 ) -> Result<ModuleAction, Error> {
     if receipt.operation != OPERATION
         || receipt.receipt_decoder != RECEIPT_DECODER
-        || receipt.executed_by != "peritus-host/http-api-v1"
+        || receipt.executed_by != "peritus-red-team/http-api@1"
     {
-        return Err(invalid("HTTP/API receipt has an unregistered host identity"));
+        return Err(invalid("HTTP/API receipt has an unregistered module runtime identity"));
     }
     let observation: ModuleHttpApiObservation = serde_json::from_value(receipt.observation)?;
     validate_observation(state, &observation)?;
@@ -125,7 +125,7 @@ pub(crate) fn admit(
         scope_revision: scope.id.clone(),
         kind: EvidenceKind::HttpApi,
         observation: format!(
-            "Host HTTP/API adapter executed {} real exchanges and confirmed {} violations",
+            "Module-owned HTTP/API adapter executed {} real exchanges and confirmed {} violations",
             observation.requests_executed,
             observation.findings.len()
         ),
@@ -270,7 +270,7 @@ fn render(observation: &ModuleHttpApiObservation, evidence: &RecordId, advanced:
 
 fn view(state: &state::State) -> String {
     format!(
-        "# HTTP/API adapter family\n\n- Registered adapter: `{ADAPTER_ID}`\n- Operation: `{OPERATION}`\n- Installed: {}\n- Retained campaigns: {}\n\nThe initial pinned suite captures real HTTP/1.1 traffic, imports live OpenAPI routes and parameters, and exercises REST, GraphQL, WebSocket and JSON-RPC behavior. It checks injection, parsing, method, content-type, error, redirect, header and request-sequence dimensions against host-owned response and copied-state oracles. Only observed violations become runtime-confirmed findings.",
+        "# HTTP/API adapter family\n\n- Registered adapter: `{ADAPTER_ID}`\n- Operation: `{OPERATION}`\n- Installed: {}\n- Retained campaigns: {}\n\nThe initial pinned suite captures real HTTP/1.1 traffic, imports live OpenAPI routes and parameters, and exercises REST, GraphQL, WebSocket and JSON-RPC behavior. It checks injection, parsing, method, content-type, error, redirect, header and request-sequence dimensions against module-owned response and copied-state oracles. Only observed violations become runtime-confirmed findings.",
         adapter::installed_runtime(state, ADAPTER_ID).is_some(),
         state.api_observations.len(),
     )

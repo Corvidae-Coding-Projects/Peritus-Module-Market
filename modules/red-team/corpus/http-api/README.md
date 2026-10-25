@@ -1,6 +1,6 @@
 # HTTP/API and browser vulnerable and safe twins
 
-These fixtures are launched only as copied source in the host-owned Phase 13 laboratory. The
+These fixtures are launched only as copied source in the module-owned Phase 13 target runtime. The
 controller starts the API service and publishes one bounded readiness record. The host connects
 directly to the private Unix socket for the pinned protocol campaign or creates temporary loopback
 bridges for fresh managed Chromium contexts. The browser campaign covers navigation, client-side

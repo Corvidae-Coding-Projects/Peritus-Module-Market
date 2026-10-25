@@ -1,6 +1,6 @@
 [package]
 name = "peritus-red-team"
-version = "0.15.0"
+version = "0.16.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -8,10 +8,11 @@ repository.workspace = true
 
 [dependencies]
 base64.workspace = true
-peritus-plugin-sdk = { path = "../../sdk/peritus-plugin-sdk" }
+peritus-plugin-sdk = { package = "peritus-red-team-plugin-sdk", path = "sdk/peritus-plugin-sdk" }
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
+rustls.workspace = true
 tempfile = "=3.27.0"
 thiserror = "=2.0.20"
 

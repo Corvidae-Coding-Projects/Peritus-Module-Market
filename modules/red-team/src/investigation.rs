@@ -1,4 +1,4 @@
-//! Phase-five campaign coordination over exact scoped source and host-owned proof receipts.
+//! Phase-five campaign coordination over exact scoped source and module-owned proof receipts.
 
 use crate::{
     Error, coverage, digest, invalid,
@@ -12,10 +12,10 @@ use crate::{
     },
 };
 use peritus_plugin_sdk::{
-    HOST_CAPABILITY_OWNED_JOBS, HOST_CAPABILITY_SCOPED_SOURCE, ModuleAction, ModuleAgentRequest,
-    ModuleCyberAccessProgram, ModuleFunction, ModuleHostProfile, ModuleHostRequest,
-    ModuleJobLimits, ModuleJobPhase, ModuleJobRequest, ModuleJobStatus, ModuleJobStatusRequest,
-    ModuleJobVerdict, ModuleMenuAction, ScopedSourceManifestRequest, ScopedSourceReadRequest,
+    HOST_CAPABILITY_SCOPED_SOURCE, ModuleAction, ModuleAgentRequest, ModuleCyberAccessProgram,
+    ModuleFunction, ModuleHostProfile, ModuleHostRequest, ModuleJobLimits, ModuleJobPhase,
+    ModuleJobRequest, ModuleJobStatus, ModuleJobVerdict, ModuleMenuAction,
+    ScopedSourceManifestRequest, ScopedSourceReadRequest,
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -101,7 +101,7 @@ pub(crate) fn pause(parameters: &Value, state: &mut State) -> Result<ModuleActio
     state.campaign.state = crate::records::CampaignState::Paused;
     crate::state::save(parameters, state)?;
     Ok(reply(
-        "Red Team investigation is paused. Exact source observations, hypotheses, receipts, decisions, and pending-stage identity remain durable. An already submitted host job remains host-owned; use jobs or job-cancel for its exact identity.",
+        "Red Team investigation is paused. Exact source observations, hypotheses, receipts, decisions, and pending-stage identity remain durable. An active module worker is bounded by the current Peritus run and stops with that run.",
         &profile(parameters),
         actions(state),
     ))
@@ -121,7 +121,7 @@ pub(crate) fn resume(
         .ok_or_else(|| invalid("investigation round overflow"))?;
     crate::state::save(parameters, state)?;
     if let Some(pending) = &state.pending {
-        return crate::resume_pending(pending);
+        return crate::resume_pending(pending, state);
     }
     next(parameters, profile, state)
 }
@@ -795,7 +795,7 @@ fn register_hypothesis(state: &mut State, arguments: &Value) -> Result<Value, Er
             || value.contains("/tmp/peritus-owned/")
         {
             return Err(invalid(
-                "attacker_input must be the exact single literal passed after the host-owned canary path; do not encode argv or name the canary path",
+                "attacker_input must be the exact single literal passed after the module-owned canary path; do not encode argv or name the canary path",
             ));
         }
     }
@@ -921,7 +921,7 @@ fn schedule_probe(
     state: &mut State,
 ) -> Result<ModuleAction, Error> {
     if let Some(pending) = &state.pending {
-        return crate::resume_pending(pending);
+        return crate::resume_pending(pending, state);
     }
     let next_plan = state.investigation.hypothesis_plans.iter().find(|plan| {
         plan.target_path.is_some()
@@ -978,15 +978,7 @@ fn schedule_probe(
     }
     state.pending = Some(PendingRequest::JobSubmit { key: key.clone(), request: request.clone() });
     crate::state::save(parameters, state)?;
-    Ok(ModuleAction::HostService {
-        request: ModuleHostRequest {
-            key,
-            capability: HOST_CAPABILITY_OWNED_JOBS.into(),
-            version: 1,
-            operation: "submit".into(),
-            input: serde_json::to_value(request)?,
-        },
-    })
+    crate::job_worker_action(state, key, request)
 }
 
 pub(crate) fn job_submitted(state: &mut State, job_id: &str) {
@@ -1084,18 +1076,10 @@ pub(crate) fn host_failure(state: &mut State, pending: &PendingRequest, detail: 
 }
 
 pub(crate) fn poll_action(state: &mut State, job_id: String) -> Result<ModuleAction, Error> {
-    let key = format!("red-team-investigation-poll-{}", &job_id[..job_id.len().min(16)]);
-    let request = ModuleJobStatusRequest { schema: 1, job_id, wait_millis: 750 };
-    state.pending = Some(PendingRequest::JobPoll { key: key.clone(), request: request.clone() });
-    Ok(ModuleAction::HostService {
-        request: ModuleHostRequest {
-            key,
-            capability: HOST_CAPABILITY_OWNED_JOBS.into(),
-            version: 1,
-            operation: "poll".into(),
-            input: serde_json::to_value(request)?,
-        },
-    })
+    let _ = state;
+    Err(invalid(format!(
+        "module worker `{job_id}` returned a nonterminal legacy status; current workers must return one terminal result"
+    )))
 }
 
 fn adjudicate(state: &mut State, arguments: &Value) -> Result<Value, Error> {

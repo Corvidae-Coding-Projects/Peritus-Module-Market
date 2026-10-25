@@ -40,7 +40,7 @@ pub(crate) fn command(
 ) -> Result<ModuleAction, Error> {
     if !adapter::supports(profile) {
         return Ok(reply(
-            "This Peritus host does not advertise `module.adapter-runtime@1`. Real-browser testing remains blocked; no ambient browser, endpoint, or network fallback was attempted.",
+            "This Peritus host does not advertise generic isolated module workers. Real-browser testing remains blocked; no ambient browser, endpoint, or network fallback was attempted.",
             profile,
             super::actions(state),
             None,
@@ -61,7 +61,7 @@ pub(crate) fn command(
                 .last()
                 .filter(|status| status.phase == ModuleLaboratoryPhase::Ready)
                 .ok_or_else(|| invalid("launch a ready browser laboratory before `browser-run`"))?;
-            if laboratory.handle.recipe_id != "linux.python-http-api.v1" {
+            if !crate::laboratory::has_runtime_target(state, &laboratory.handle.laboratory_id) {
                 return Err(invalid(
                     "the current laboratory does not expose the registered browser interface",
                 ));
@@ -103,9 +103,9 @@ pub(crate) fn admit(
 ) -> Result<ModuleAction, Error> {
     if receipt.operation != OPERATION
         || receipt.receipt_decoder != RECEIPT_DECODER
-        || receipt.executed_by != "peritus-host/browser-client-v1"
+        || receipt.executed_by != "peritus-red-team/browser-client@1"
     {
-        return Err(invalid("browser receipt has an unregistered host identity"));
+        return Err(invalid("browser receipt has an unregistered module runtime identity"));
     }
     let observation: ModuleBrowserObservation = serde_json::from_value(receipt.observation)?;
     validate_observation(state, &observation)?;
@@ -125,7 +125,7 @@ pub(crate) fn admit(
         scope_revision: scope.id.clone(),
         kind: EvidenceKind::BrowserClient,
         observation: format!(
-            "Host browser adapter executed {} real actions and confirmed {} violations",
+            "Module-owned browser adapter executed {} real actions and confirmed {} violations",
             observation.actions_executed,
             observation.findings.len()
         ),

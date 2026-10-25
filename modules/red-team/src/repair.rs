@@ -12,10 +12,10 @@ use crate::{
     },
 };
 use peritus_plugin_sdk::{
-    HOST_CAPABILITY_OWNED_JOBS, HOST_CAPABILITY_SCOPED_SOURCE, ModuleAction, ModuleAgentRequest,
+    HOST_CAPABILITY_SCOPED_SOURCE, HOST_CAPABILITY_WORKER, ModuleAction, ModuleAgentRequest,
     ModuleCyberAccessProgram, ModuleFunction, ModuleHostProfile, ModuleHostRequest,
-    ModuleJobLimits, ModuleJobPhase, ModuleJobRequest, ModuleJobStatus, ModuleJobStatusRequest,
-    ModuleJobVerdict, ModuleMenuAction, ScopedSourceVerification, ScopedSourceVerifyRequest,
+    ModuleJobLimits, ModuleJobPhase, ModuleJobRequest, ModuleJobStatus, ModuleJobVerdict,
+    ModuleMenuAction, ScopedSourceVerification, ScopedSourceVerifyRequest,
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -142,7 +142,7 @@ fn model(state: &State, role: &str) -> Result<ModuleAction, Error> {
         "reviewer" => (
             "reviewer",
             "Red Team · independent patch review",
-            "Inspect the exact diff and every host-authored replay receipt once. Accept only a root-cause fix whose attack, legitimate, malformed and adjacent cases all passed through the fixed host oracle. Reject hollow implementations, feature disabling, detector suppression, hard-coded case handling, changed proof requirements, unrelated edits and unaddressed prerequisites.",
+            "Inspect the exact diff and every module-authored replay receipt once. Accept only a root-cause fix whose attack, legitimate, malformed and adjacent cases all passed through the fixed module oracle. Reject hollow implementations, feature disabling, detector suppression, hard-coded case handling, changed proof requirements, unrelated edits and unaddressed prerequisites.",
         ),
         _ => return Err(invalid("unknown repair role")),
     };
@@ -401,7 +401,7 @@ fn commit_patch(state: &mut State, arguments: &Value) -> Result<Value, Error> {
         review_id: None,
     });
     state.repair.stage = RepairStage::Replaying;
-    state.repair.feedback = "The exact-preimage proposal is durable. The Rust coordinator will now execute every replay case through the host-owned copy-only adapter without another approval prompt.".into();
+    state.repair.feedback = "The exact-preimage proposal is durable. The Rust coordinator will now execute every replay case through the module-owned copy-only adapter without another approval prompt.".into();
     Ok(json!({"saved":true,"request_complete":true,"next_stage":"replaying"}))
 }
 
@@ -411,9 +411,9 @@ fn schedule_case(
     state: &mut State,
 ) -> Result<ModuleAction, Error> {
     if let Some(pending) = &state.pending {
-        return crate::resume_pending(pending);
+        return crate::resume_pending(pending, state);
     }
-    if !profile.as_ref().is_some_and(|profile| profile.supports(HOST_CAPABILITY_OWNED_JOBS, 1)) {
+    if !profile.as_ref().is_some_and(|profile| profile.supports(HOST_CAPABILITY_WORKER, 1)) {
         return Ok(reply(
             "This host cannot execute the required copy-only replay adapter. The patch remains proposed and blocked; no ambient fallback was attempted.",
             profile,
@@ -438,7 +438,7 @@ fn schedule_case(
     else {
         state.repair.stage = RepairStage::Reviewing;
         state.repair.round = state.repair.round.saturating_add(1);
-        state.repair.feedback = "Every replay case reached a retained terminal or blocked state. Independently review the exact diff and host-authored receipts now.".into();
+        state.repair.feedback = "Every replay case reached a retained terminal or blocked state. Independently review the exact diff and module-authored receipts now.".into();
         crate::state::save(parameters, state)?;
         return next(parameters, profile, state);
     };
@@ -477,15 +477,7 @@ fn schedule_case(
     let key = format!("red-team-repair-submit-{}-{}", plan.order, case_index + 1);
     state.pending = Some(PendingRequest::JobSubmit { key: key.clone(), request: request.clone() });
     crate::state::save(parameters, state)?;
-    Ok(ModuleAction::HostService {
-        request: ModuleHostRequest {
-            key,
-            capability: HOST_CAPABILITY_OWNED_JOBS.into(),
-            version: 1,
-            operation: "submit".into(),
-            input: serde_json::to_value(request)?,
-        },
-    })
+    crate::job_worker_action(state, key, request)
 }
 
 pub(crate) fn job_submitted(state: &mut State, job_id: &str) {
@@ -724,7 +716,7 @@ fn record_patch_revision(
     let diff_artifact = plan
         .diff_artifact
         .clone()
-        .ok_or_else(|| invalid("patch revision has no host-authored diff"))?;
+        .ok_or_else(|| invalid("patch revision has no module-authored diff"))?;
     let finding = state
         .findings
         .iter()
@@ -767,7 +759,7 @@ fn latest_patch_record(state: &State, plan_index: usize) -> Result<&PatchRecord,
     let diff = state.repair.plans[plan_index]
         .diff_artifact
         .as_deref()
-        .ok_or_else(|| invalid("patch review has no host-authored diff"))?;
+        .ok_or_else(|| invalid("patch review has no module-authored diff"))?;
     state
         .patches
         .iter()
@@ -781,7 +773,7 @@ fn request_original_verification(
     state: &mut State,
 ) -> Result<ModuleAction, Error> {
     if let Some(pending) = &state.pending {
-        return crate::resume_pending(pending);
+        return crate::resume_pending(pending, state);
     }
     let authority = state
         .active_handle()
@@ -815,18 +807,10 @@ pub(crate) fn original_verified(state: &mut State, result: ScopedSourceVerificat
 }
 
 pub(crate) fn poll_action(state: &mut State, job_id: String) -> Result<ModuleAction, Error> {
-    let key = format!("red-team-repair-poll-{}", &job_id[..job_id.len().min(16)]);
-    let request = ModuleJobStatusRequest { schema: 1, job_id, wait_millis: 750 };
-    state.pending = Some(PendingRequest::JobPoll { key: key.clone(), request: request.clone() });
-    Ok(ModuleAction::HostService {
-        request: ModuleHostRequest {
-            key,
-            capability: HOST_CAPABILITY_OWNED_JOBS.into(),
-            version: 1,
-            operation: "poll".into(),
-            input: serde_json::to_value(request)?,
-        },
-    })
+    let _ = state;
+    Err(invalid(format!(
+        "module worker `{job_id}` returned a nonterminal legacy status; current workers must return one terminal result"
+    )))
 }
 
 fn role_for_key<'a>(state: &State, key: &'a str) -> Result<&'a str, Error> {

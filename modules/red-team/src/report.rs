@@ -123,7 +123,7 @@ pub(crate) fn publish_report(
     let mut limitations = vec![
         "Coverage is bounded to the recorded source observations, hypotheses, inputs and host receipts; it is not a clean-codebase claim.".into(),
         "An examined family or unsuccessful probe is not evidence that the application is secure.".into(),
-        "The current trusted runtime adapter observes exact canary disclosure. Other interfaces remain analysis-supported, inconclusive, blocked or unexamined unless a suitable host adapter produced evidence.".into(),
+        "The current trusted runtime adapter observes exact canary disclosure. Other interfaces remain analysis-supported, inconclusive, blocked or unexamined unless a suitable module adapter produced evidence.".into(),
         "Patch validation is bounded to the recorded attack, legitimate, malformed and adjacent cases. It is not proof against every input or security property.".into(),
         "The current application laboratories prove the copied Linux Python key/value and HTTP/API fixture lifecycles. They do not establish coverage for other stacks, stores, operating systems, or unregistered security classes.".into(),
         "The Phase 12 static analyzer provides pinned deterministic source, dependency, secret and configuration leads. Its bounded same-file flow and finite advisory data do not replace compiler-semantic analyzers, full advisory services, or runtime proof.".into(),
@@ -132,7 +132,7 @@ pub(crate) fn publish_report(
         "The Phase 15 identity adapter covers a pinned laboratory-generated multi-user topology. External identity onboarding, federation, hardware authenticators, and application-specific permission semantics remain explicit gaps.".into(),
         "The Phase 16 file/parser adapter covers registered Linux Python HTTP twins, real filesystem/TAR effects, a small PH16 grammar, behavioral edges, and one CPython-to-libc child fault. Arbitrary grammars, other ABIs, and compiler sanitizer builds remain explicit gaps.".into(),
         "The Phase 17 workflow adapter covers one pinned approval/accounting domain and one retained deterministic two-worker schedule. Application-specific contracts, arbitrary schedules, distributed stores, and non-Linux runtimes remain explicit gaps.".into(),
-        "The Phase 18 boundary adapter covers host-private Unix-socket DNS, HTTP and TLS peers, deny-all IP networking, lab certificates, copied policy/privilege checks, and copied-application authority cases. Live cloud providers, host-privileged runtimes, arbitrary protocols, public PKI, and production infrastructure remain explicit gaps.".into(),
+        "The Phase 18 boundary adapter covers module-private Unix-socket DNS, HTTP and TLS peers, deny-all IP networking, lab certificates, copied policy/privilege checks, and copied-application authority cases. Live cloud providers, host-privileged runtimes, arbitrary protocols, public PKI, and production infrastructure remain explicit gaps.".into(),
         "The Phase 19 attack graph proves one stored-content chain across exact source, private HTTP, and isolated Chromium receipts. Other cross-adapter combinations, distributed systems, public networks, non-browser clients, and privileged-host chains remain explicit gaps until separately registered profiles execute them.".into(),
         "The Phase 20 complete journey coordinates every currently registered profile one host operation at a time and preserves restart, steering, partial-report, cleanup, and export state. It does not claim universal vulnerability coverage, expert parity, or support for unregistered adapters and target technologies.".into(),
     ];
@@ -235,7 +235,9 @@ pub(crate) fn publish_report(
             continue;
         };
         if digest(bytes) != *artifact {
-            return Err(invalid("retained patch bytes do not match their host-authored identity"));
+            return Err(invalid(
+                "retained patch bytes do not match their module-authored identity",
+            ));
         }
         publish_bytes(&patches.join(format!("{artifact}.patch")), bytes)?;
         if !patch_artifacts.contains(artifact) {
@@ -246,7 +248,7 @@ pub(crate) fn publish_report(
         let repair = &observation.repair;
         if digest(&repair.diff_bytes) != repair.diff_artifact {
             return Err(invalid(
-                "attack-graph diff bytes do not match their host-authored identity",
+                "attack-graph diff bytes do not match their module-authored identity",
             ));
         }
         publish_bytes(
@@ -294,13 +296,13 @@ pub(crate) fn publish_report(
             "Reopen this bundle in a fresh Peritus process with the exact source snapshot named here.".into(),
             "Re-run the original finding receipt against the immutable original target; do not substitute target, evaluator, canary or proof rule.".into(),
             "Apply patch files in recorded order only to a new disposable copy after verifying each expected preimage digest.".into(),
-            "Replay every recorded attack, legitimate, malformed and adjacent case through the named host adapter and compare host-authored receipts.".into(),
+            "Replay every recorded attack, legitimate, malformed and adjacent case through the named module adapter and compare module-authored receipts.".into(),
             "For HTTP/API findings, replay the exact minimized method, target, headers and body digest against a freshly launched laboratory and compare response plus copied-state receipts.".into(),
             "For browser findings, replay the exact case digest in a fresh isolated browser context and compare browser, traffic, artifact and copied-state receipts.".into(),
-            "For identity/access findings, recreate the opaque laboratory identity topology and replay the credential-free case digest through host-private credentials; compare lifecycle, differential response, copied-state, and redaction receipts.".into(),
+            "For identity/access findings, recreate the opaque laboratory identity topology and replay the credential-free case digest through module-private credentials; compare lifecycle, differential response, copied-state, and redaction receipts.".into(),
             "For file/parser findings, recreate the exact disposable laboratory, decode the retained bounded base64 input, and compare the fixed canary, response, native-signal, behavioral-edge, resource, and campaign digests.".into(),
             "For workflow findings, recreate the exact starting snapshot and identity/action order, replay the retained schedule when present, and compare host-read final state plus documented invariant disposition. Proposed invariants and unrelated transport failures never prove a finding.".into(),
-            "For boundary findings, recreate the exact disposable laboratory and host-private peer set, replay the retained case digest, and compare copied state, peer counters, TLS outcomes, policy effects, and host-authority invariants. Blocked live-cloud and host-privileged cases remain gaps.".into(),
+            "For boundary findings, recreate the exact disposable laboratory and module-private peer set, replay the retained case digest, and compare copied state, peer counters, TLS outcomes, policy effects, and containing-host authority invariants. Blocked live-cloud and host-privileged cases remain gaps.".into(),
             "For attack graphs, recreate both exact ready laboratory twins, verify the vulnerable preimage and replacement digests, replay every source, HTTP, and browser obligation, remove the recorded prerequisite to reproduce the broken path, and reject every edge without a retained receipt.".into(),
             "Re-read the original workspace and compare every included path, byte digest and executable bit with the starting snapshot.".into(),
         ],
@@ -464,7 +466,7 @@ fn markdown(state: &State, limitations: &[String]) -> String {
     let invalidated = state.observations.len().saturating_sub(current);
     let reused = state.observations.iter().map(|observation| observation.reuse_count).sum::<u64>();
     let mut text = format!(
-        "# Red Team investigation and repair report\n\n## Scope and source\n\n- Campaign: `{}`\n- Scope revision: `{}`\n- Source snapshot: `{}`\n- Manifest artifact: `{}`\n- Investigation stage: `{:?}`\n- Repair stage: `{:?}`\n- Complete-journey stage: `{:?}`\n- Complete-journey progress: {}/{}\n- Complete-journey gaps/failures: {}\n- Skill digest: `{}`\n- Provider routes: {}\n- Current source observations: {current}\n- Invalidated source observations: {invalidated}\n- Reused identical observations: {reused}\n- Host-owned jobs: {}\n- Trusted job receipts: {}\n- Managed-adapter receipts: {}\n- Static-analysis observations: {}\n- HTTP/API observations: {}\n- Real-browser observations: {}\n- Identity/access observations: {}\n- File/parser observations: {}\n- Workflow/state observations: {}\n- Boundary/authority observations: {}\n- Attack-graph observations: {}\n- Application-laboratory receipts: {}\n- Adjudicated findings: {}\n- Patch revisions: {}\n\n",
+        "# Red Team investigation and repair report\n\n## Scope and source\n\n- Campaign: `{}`\n- Scope revision: `{}`\n- Source snapshot: `{}`\n- Manifest artifact: `{}`\n- Investigation stage: `{:?}`\n- Repair stage: `{:?}`\n- Complete-journey stage: `{:?}`\n- Complete-journey progress: {}/{}\n- Complete-journey gaps/failures: {}\n- Skill digest: `{}`\n- Provider routes: {}\n- Current source observations: {current}\n- Invalidated source observations: {invalidated}\n- Reused identical observations: {reused}\n- Module worker operations: {}\n- Trusted job receipts: {}\n- Managed-adapter receipts: {}\n- Static-analysis observations: {}\n- HTTP/API observations: {}\n- Real-browser observations: {}\n- Identity/access observations: {}\n- File/parser observations: {}\n- Workflow/state observations: {}\n- Boundary/authority observations: {}\n- Attack-graph observations: {}\n- Application-laboratory receipts: {}\n- Adjudicated findings: {}\n- Patch revisions: {}\n\n",
         state.campaign.id.value,
         scope.map_or("not selected", |record| record.id.value.as_str()),
         snapshot.map_or("not captured", |record| record.snapshot_digest.as_str()),
@@ -609,7 +611,7 @@ fn markdown(state: &State, limitations: &[String]) -> String {
             ));
         }
     }
-    text.push_str("\n## HTTP/API real-interface campaigns\n\nOnly host-oracle violations are runtime-confirmed. Rejections and unreachable routes remain distinct outcomes.\n\n");
+    text.push_str("\n## HTTP/API real-interface campaigns\n\nOnly module-oracle violations are runtime-confirmed. Rejections and unreachable routes remain distinct outcomes.\n\n");
     if state.api_observations.is_empty() {
         text.push_str("No HTTP/API campaign receipt has been admitted.\n");
     }
@@ -672,7 +674,7 @@ fn markdown(state: &State, limitations: &[String]) -> String {
             text.push_str(&format!("- {gap}\n"));
         }
     }
-    text.push_str("\n## Real-browser client campaigns\n\nBrowser findings require a real client effect and the pinned host oracle. Rejected behavior is retained separately from runtime-confirmed violations.\n\n");
+    text.push_str("\n## Real-browser client campaigns\n\nBrowser findings require a real client effect and the pinned module oracle. Rejected behavior is retained separately from runtime-confirmed violations.\n\n");
     if state.browser_observations.is_empty() {
         text.push_str("No real-browser campaign receipt has been admitted.\n");
     }
@@ -720,7 +722,7 @@ fn markdown(state: &State, limitations: &[String]) -> String {
             text.push_str(&format!("- {gap}\n"));
         }
     }
-    text.push_str("\n## Authentication, session, authorization, and tenancy campaigns\n\nCredentials remain host-private. Reports retain only opaque identities, lifecycle/differential oracles, copied-state facts, and the redaction record.\n\n");
+    text.push_str("\n## Authentication, session, authorization, and tenancy campaigns\n\nCredentials remain module-private. Reports retain only opaque identities, lifecycle/differential oracles, copied-state facts, and the redaction record.\n\n");
     if state.identity_observations.is_empty() {
         text.push_str("No identity/access campaign receipt has been admitted.\n");
     }
@@ -862,7 +864,7 @@ fn markdown(state: &State, limitations: &[String]) -> String {
             text.push_str(&format!("- {gap}\n"));
         }
     }
-    text.push_str("\n## Private-network, TLS, platform, and delegated-authority campaigns\n\nNetwork peers and certificates are host-created and reachable only through private laboratory sockets. Public, LAN, host-loopback, host-privilege, and host-tool effects must remain zero.\n\n");
+    text.push_str("\n## Private-network, TLS, platform, and delegated-authority campaigns\n\nNetwork peers and certificates are module-created and reachable only through private laboratory sockets. Public, LAN, host-loopback, host-privilege, and host-tool effects must remain zero.\n\n");
     if state.boundary_observations.is_empty() {
         text.push_str("No boundary-authority campaign receipt has been admitted.\n");
     }
@@ -988,7 +990,7 @@ fn markdown(state: &State, limitations: &[String]) -> String {
             text.push_str(&format!("- {gap}\n"));
         }
     }
-    text.push_str("\n## Host-owned jobs\n\n");
+    text.push_str("\n## Module worker operations\n\n");
     if state.jobs.is_empty() {
         text.push_str("No dependency preparation or contained proof has been observed.\n");
     } else {

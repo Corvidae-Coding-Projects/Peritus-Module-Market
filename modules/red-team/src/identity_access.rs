@@ -41,7 +41,7 @@ pub(crate) fn command(
 ) -> Result<ModuleAction, Error> {
     if !adapter::supports(profile) {
         return Ok(reply(
-            "This Peritus host does not advertise `module.adapter-runtime@1`. Identity and access-control testing remains blocked; no ambient credentials, endpoint, or network fallback was attempted.",
+            "This Peritus host does not advertise generic isolated module workers. Identity and access-control testing remains blocked; no ambient credentials, endpoint, or network fallback was attempted.",
             profile,
             super::actions(state),
             None,
@@ -64,7 +64,7 @@ pub(crate) fn command(
                 .ok_or_else(|| {
                     invalid("launch a ready identity laboratory before `identity-run`")
                 })?;
-            if laboratory.handle.recipe_id != "linux.python-http-api.v1" {
+            if !crate::laboratory::has_runtime_target(state, &laboratory.handle.laboratory_id) {
                 return Err(invalid(
                     "the current laboratory does not expose the registered identity interface",
                 ));
@@ -106,9 +106,9 @@ pub(crate) fn admit(
 ) -> Result<ModuleAction, Error> {
     if receipt.operation != OPERATION
         || receipt.receipt_decoder != RECEIPT_DECODER
-        || receipt.executed_by != "peritus-host/identity-access-v1"
+        || receipt.executed_by != "peritus-red-team/identity-access@1"
     {
-        return Err(invalid("identity receipt has an unregistered host identity"));
+        return Err(invalid("identity receipt has an unregistered module runtime identity"));
     }
     let observation: ModuleIdentityAccessObservation = serde_json::from_value(receipt.observation)?;
     validate_observation(state, &observation)?;
@@ -128,7 +128,7 @@ pub(crate) fn admit(
         scope_revision: scope.id.clone(),
         kind: EvidenceKind::IdentityAccess,
         observation: format!(
-            "Host identity adapter executed {} real operations and confirmed {} violations without projecting credential bytes",
+            "Module-owned identity adapter executed {} real operations and confirmed {} violations without projecting credential bytes",
             observation.operations_executed,
             observation.findings.len()
         ),
@@ -290,7 +290,7 @@ fn count(
 
 fn view(state: &state::State) -> String {
     format!(
-        "# Identity and access-control adapter family\n\n- Registered adapter: `{ADAPTER_ID}`\n- Operation: `{OPERATION}`\n- Installed: {}\n- Retained campaigns: {}\n\nThe pinned laboratory topology creates anonymous, ordinary, privileged, same-tenant, and cross-tenant opaque identities. The host alone handles login credentials, MFA factors, recovery values, and session tokens while it exercises lifecycle, differential authorization, object ownership, adjacent-route, and tenant-isolation oracles.",
+        "# Identity and access-control adapter family\n\n- Registered adapter: `{ADAPTER_ID}`\n- Operation: `{OPERATION}`\n- Installed: {}\n- Retained campaigns: {}\n\nThe pinned laboratory topology creates anonymous, ordinary, privileged, same-tenant, and cross-tenant opaque identities. The module alone handles login credentials, MFA factors, recovery values, and session tokens while it exercises lifecycle, differential authorization, object ownership, adjacent-route, and tenant-isolation oracles.",
         adapter::installed_runtime(state, ADAPTER_ID).is_some(),
         state.identity_observations.len(),
     )

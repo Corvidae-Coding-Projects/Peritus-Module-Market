@@ -40,7 +40,7 @@ pub(crate) fn command(
 ) -> Result<ModuleAction, Error> {
     if !adapter::supports(profile) {
         return Ok(reply(
-            "This Peritus host does not advertise `module.adapter-runtime@1`. Cross-adapter graph search remains blocked; no model-invented edge or ambient execution fallback was attempted.",
+            "This Peritus host does not advertise generic isolated module workers. Cross-adapter graph search remains blocked; no model-invented edge or ambient execution fallback was attempted.",
             profile,
             super::actions(state),
             None,
@@ -102,9 +102,9 @@ pub(crate) fn admit(
 ) -> Result<ModuleAction, Error> {
     if receipt.operation != OPERATION
         || receipt.receipt_decoder != RECEIPT_DECODER
-        || receipt.executed_by != "peritus-host/attack-graph-v1"
+        || receipt.executed_by != "peritus-red-team/attack-graph@1"
     {
-        return Err(invalid("attack-graph receipt has an unregistered host identity"));
+        return Err(invalid("attack-graph receipt has an unregistered module runtime identity"));
     }
     let observation: ModuleAttackGraphObservation = serde_json::from_value(receipt.observation)?;
     validate_observation(state, &observation)?;
@@ -124,7 +124,7 @@ pub(crate) fn admit(
         scope_revision: scope.id.clone(),
         kind: EvidenceKind::AttackGraph,
         observation: format!(
-            "Host attack-graph adapter retained {} nodes, {} edges, {} searched chains, a counterfactual, and {} accepted repair replays across exact source, private HTTP, and a real isolated browser",
+            "Module-owned attack-graph adapter retained {} nodes, {} edges, {} searched chains, a counterfactual, and {} accepted repair replays across exact source, private HTTP, and a real isolated browser",
             observation.nodes.len(),
             observation.edges.len(),
             observation.chains.len(),
@@ -174,8 +174,8 @@ fn ready_twins(
     let repaired = ready[0];
     let vulnerable = ready[1];
     if vulnerable.handle.source_snapshot != repaired.handle.source_snapshot
-        || vulnerable.handle.recipe_id != "linux.python-http-api.v1"
-        || repaired.handle.recipe_id != "linux.python-http-api.v1"
+        || !crate::laboratory::has_runtime_target(state, &vulnerable.handle.laboratory_id)
+        || !crate::laboratory::has_runtime_target(state, &repaired.handle.laboratory_id)
     {
         return Err(invalid(
             "attack-graph laboratories must be ready HTTP twins from one source snapshot",
@@ -369,7 +369,7 @@ fn render(
 
 fn view(state: &state::State) -> String {
     format!(
-        "# Cross-adapter attack graph\n\n- Registered adapter: `{ADAPTER_ID}`\n- Operation: `{OPERATION}`\n- Installed: {}\n- Retained campaigns: {}\n\nThe host searches only receipt-supported edges across exact source, private HTTP, and isolated-browser evidence. It retains counterfactual and rejected paths, groups root causes without erasing distinct entry points or impacts, and hands back an exact copy-only patch plus adapter-specific replays.",
+        "# Cross-adapter attack graph\n\n- Registered adapter: `{ADAPTER_ID}`\n- Operation: `{OPERATION}`\n- Installed: {}\n- Retained campaigns: {}\n\nThe module searches only receipt-supported edges across exact source, private HTTP, and isolated-browser evidence. It retains counterfactual and rejected paths, groups root causes without erasing distinct entry points or impacts, and hands back an exact copy-only patch plus adapter-specific replays.",
         adapter::installed_runtime(state, ADAPTER_ID).is_some(),
         state.attack_graph_observations.len(),
     )

@@ -1,11 +1,13 @@
 //! Phase-eleven disposable application laboratory coordinated through the typed host capability.
 
-use crate::{Error, invalid, reply, state, state::PendingRequest};
+use crate::{
+    Error, invalid, reply, state,
+    state::{PendingRequest, RuntimeTarget, RuntimeTargetBinding},
+};
 use peritus_plugin_sdk::{
     HOST_CAPABILITY_APPLICATION_LABORATORY, ModuleAction, ModuleHostProfile, ModuleHostRequest,
-    ModuleLaboratoryCatalog, ModuleLaboratoryCreateRequest, ModuleLaboratoryInvokeRequest,
-    ModuleLaboratoryLifecycleRequest, ModuleLaboratoryProcessInput, ModuleLaboratoryResult,
-    ModuleLaboratorySourceCreateRequest,
+    ModuleLaboratoryCatalog, ModuleLaboratoryInvokeRequest, ModuleLaboratoryLifecycleRequest,
+    ModuleLaboratoryProcessInput, ModuleLaboratoryResult, ModuleLaboratorySourceCreateRequest,
 };
 use serde_json::{Value, json};
 
@@ -346,7 +348,6 @@ pub(crate) fn admit(
             catalog_text(&catalog)
         }
         PendingRequest::LaboratoryCreate { .. }
-        | PendingRequest::LaboratorySourceCreate { .. }
         | PendingRequest::LaboratoryLifecycle { .. }
         | PendingRequest::LaboratoryInvoke { .. } => {
             let result: ModuleLaboratoryResult = serde_json::from_value(output)?;
@@ -357,7 +358,7 @@ pub(crate) fn admit(
             if let Some(receipt) = result.receipt {
                 state.laboratory_receipts.push(receipt.clone());
                 format!(
-                    "{}\n\n## Host-authored receipt\n\n- Operation: `{}`\n- Request: `{}`\n- Application source: `{}`\n- Backing service source: `{}`\n- Isolation: `{}`\n- Network: `{}`\n- Process cleanup: {}\n- Original source unchanged: `{}`\n\n```json\n{}\n```",
+                    "{}\n\n## Module-authored receipt\n\n- Operation: `{}`\n- Request: `{}`\n- Application source: `{}`\n- Backing service source: `{}`\n- Isolation: `{}`\n- Network: `{}`\n- Process cleanup: {}\n- Original source unchanged: `{}`\n\n```json\n{}\n```",
                     status_text(&result.status),
                     receipt.operation,
                     receipt.request_digest,
@@ -375,6 +376,39 @@ pub(crate) fn admit(
                 status_text(&result.status)
             }
         }
+        PendingRequest::LaboratorySourceCreate { target, .. } => {
+            let result: ModuleLaboratoryResult = serde_json::from_value(output)?;
+            if result.schema != 1 || result.status.schema != 1 {
+                return Err(invalid("unsupported laboratory result schema"));
+            }
+            if let Some(target) = target {
+                state
+                    .runtime_targets
+                    .retain(|binding| binding.laboratory_id != result.status.handle.laboratory_id);
+                state.runtime_targets.push(RuntimeTargetBinding {
+                    laboratory_id: result.status.handle.laboratory_id.clone(),
+                    target,
+                });
+            }
+            state.laboratory_statuses.push(result.status.clone());
+            if let Some(receipt) = result.receipt {
+                state.laboratory_receipts.push(receipt.clone());
+                format!(
+                    "{}\n\n## Generic host receipt\n\n- Operation: `{}`\n- Request: `{}`\n- Isolation: `{}`\n- Network: `{}`\n- Process cleanup: {}\n- Original source unchanged: `{}`",
+                    status_text(&result.status),
+                    receipt.operation,
+                    receipt.request_digest,
+                    receipt.isolation_backend,
+                    receipt.network_policy,
+                    receipt.process_cleanup_complete,
+                    receipt
+                        .original_source_unchanged
+                        .map_or("not checked".into(), |value| value.to_string()),
+                )
+            } else {
+                status_text(&result.status)
+            }
+        }
         _ => return Err(invalid("non-laboratory pending request reached laboratory admission")),
     };
     state.pending = None;
@@ -384,6 +418,10 @@ pub(crate) fn admit(
 
 pub(crate) fn supports(profile: &Option<ModuleHostProfile>) -> bool {
     profile.as_ref().is_some_and(|value| value.supports(HOST_CAPABILITY_APPLICATION_LABORATORY, 1))
+}
+
+pub(crate) fn has_runtime_target(state: &state::State, laboratory_id: &str) -> bool {
+    state.runtime_targets.iter().any(|binding| binding.laboratory_id == laboratory_id)
 }
 
 pub(crate) fn view(state: &state::State) -> String {
@@ -407,7 +445,7 @@ pub(crate) fn view(state: &state::State) -> String {
             .join("\n")
     };
     format!(
-        "{catalog}\n\n## Latest retained laboratory\n\n{latest}\n\n## Host-authored receipts\n\n{}\n\n## Retained errors\n\n{errors}",
+        "{catalog}\n\n## Latest retained laboratory\n\n{latest}\n\n## Module-authored receipts\n\n{}\n\n## Retained errors\n\n{errors}",
         state.laboratory_receipts.len(),
     )
 }
@@ -415,29 +453,22 @@ pub(crate) fn view(state: &state::State) -> String {
 fn create(
     parameters: &Value,
     state: &mut state::State,
-    recipe_id: &str,
+    _recipe_id: &str,
     application_path: String,
     service_path: String,
 ) -> Result<ModuleAction, Error> {
-    let source = state
-        .active_handle()
-        .ok_or_else(|| invalid("capture source with `scope` before creating a laboratory"))?;
-    let request = ModuleLaboratoryCreateRequest {
-        schema: 1,
-        source,
-        recipe_id: recipe_id.into(),
-        application_path,
-        service_path,
-    };
-    service(
-        parameters,
-        state,
-        PendingRequest::LaboratoryCreate { key: next_key(state, "create"), request },
-        "create",
-    )
+    create_source_target(parameters, state, Some(RuntimeTarget { application_path, service_path }))
 }
 
 fn create_source(parameters: &Value, state: &mut state::State) -> Result<ModuleAction, Error> {
+    create_source_target(parameters, state, None)
+}
+
+fn create_source_target(
+    parameters: &Value,
+    state: &mut state::State,
+    target: Option<RuntimeTarget>,
+) -> Result<ModuleAction, Error> {
     let source = state
         .active_handle()
         .ok_or_else(|| invalid("capture source with `scope` before creating a laboratory"))?;
@@ -445,7 +476,11 @@ fn create_source(parameters: &Value, state: &mut state::State) -> Result<ModuleA
     service(
         parameters,
         state,
-        PendingRequest::LaboratorySourceCreate { key: next_key(state, "create-source"), request },
+        PendingRequest::LaboratorySourceCreate {
+            key: next_key(state, "create-source"),
+            request,
+            target,
+        },
         "create-source",
     )
 }
@@ -561,7 +596,7 @@ fn next_key(state: &state::State, operation: &str) -> String {
 }
 
 fn catalog_text(catalog: &ModuleLaboratoryCatalog) -> String {
-    let mut text = "# Host-owned laboratory catalog\n\n".to_owned();
+    let mut text = "# Red Team laboratory catalog\n\n".to_owned();
     for recipe in &catalog.recipes {
         text.push_str(&format!(
             "- `{}` {} — {}/{} — `{}` — interface `{}` — source roles {}\n",

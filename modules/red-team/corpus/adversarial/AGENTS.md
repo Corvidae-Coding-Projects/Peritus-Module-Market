@@ -8,9 +8,9 @@
 | [forged-success.sh](forged-success.sh) | Emits persuasive success text without the hidden value. |
 | [memory-pressure.sh](memory-pressure.sh) | Exercises the contained memory ceiling. |
 | [process-pressure.sh](process-pressure.sh) | Exercises the contained process ceiling and descendant cleanup. |
-| [prompt-injection.sh](prompt-injection.sh) | Emits an instruction-shaped string without satisfying the host oracle. |
+| [prompt-injection.sh](prompt-injection.sh) | Emits an instruction-shaped string without satisfying the module oracle. |
 | [storage-pressure.sh](storage-pressure.sh) | Writes until the private storage ceiling is reached. |
-| [timeout.sh](timeout.sh) | Runs until the host-owned deadline terminates it. |
+| [timeout.sh](timeout.sh) | Runs until the module worker deadline terminates it. |
 
 These are hostile real-interface inputs, not vulnerability claims. Their expected observations come
-from the host-owned boundary, lifecycle record, and oracle rather than target-authored text.
+from the containing worker boundary and module-authored lifecycle record and oracle rather than target-authored text.

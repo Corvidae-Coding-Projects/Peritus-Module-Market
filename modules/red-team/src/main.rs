@@ -10,10 +10,25 @@ use std::io::{Read, Write};
 const FRAME_BYTES: u32 = 32 * 1024 * 1024;
 
 fn main() {
-    if let Err(error) = serve() {
+    let result =
+        if std::env::args().nth(1).as_deref() == Some("worker") { worker() } else { serve() };
+    if let Err(error) = result {
         eprintln!("red-team: {error}");
         std::process::exit(1);
     }
+}
+
+fn worker() -> Result<(), Box<dyn std::error::Error>> {
+    let name = std::env::args().nth(2).ok_or("worker name is required")?;
+    let mut bytes = Vec::new();
+    std::io::stdin().read_to_end(&mut bytes)?;
+    if bytes.len() > 1024 * 1024 {
+        return Err("worker input exceeds 1 MiB".into());
+    }
+    let input = serde_json::from_slice(&bytes)?;
+    let output = peritus_red_team::run_worker(&name, input)?;
+    serde_json::to_writer(std::io::stdout().lock(), &output)?;
+    Ok(())
 }
 
 fn serve() -> Result<(), Box<dyn std::error::Error>> {

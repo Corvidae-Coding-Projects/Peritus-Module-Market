@@ -14,20 +14,30 @@ mod laboratory;
 pub mod records;
 mod repair;
 mod report;
+mod runtime_attack_graph;
+mod runtime_boundary_authority;
+mod runtime_browser;
+mod runtime_browser_client;
+mod runtime_file_fuzz;
+mod runtime_http_api;
+mod runtime_identity_access;
+mod runtime_laboratory;
+mod runtime_workflow_state;
 mod source_analysis;
+mod source_analysis_worker;
 mod state;
+mod worker;
 mod workflow_state;
 
 use peritus_plugin_sdk::{
-    HOST_CAPABILITY_ADAPTER_RUNTIME, HOST_CAPABILITY_APPLICATION_LABORATORY,
-    HOST_CAPABILITY_CHECKPOINT, HOST_CAPABILITY_OWNED_JOBS, HOST_CAPABILITY_PRIVATE_STATE,
-    HOST_CAPABILITY_PROFILE, HOST_CAPABILITY_SCOPED_SOURCE, MODULE_HOST_CONTRACT_VERSION,
-    ModuleAction, ModuleAttachment, ModuleHostOutcome, ModuleHostProfile, ModuleHostRequest,
-    ModuleHostResult, ModuleJobCancelRequest, ModuleJobHandle, ModuleJobLimits, ModuleJobLogPage,
-    ModuleJobLogRequest, ModuleJobPhase, ModuleJobRequest, ModuleJobStatus, ModuleJobStatusRequest,
-    ModuleJobStream, ModuleMenuAction, ScopedSourceHandle, ScopedSourceManifestPage,
-    ScopedSourceManifestRequest, ScopedSourceReadRequest, ScopedSourceReadResult,
-    ScopedSourceRequest, ScopedSourceRevocation, ScopedSourceRevokeRequest,
+    HOST_CAPABILITY_APPLICATION_LABORATORY, HOST_CAPABILITY_CHECKPOINT,
+    HOST_CAPABILITY_PRIVATE_STATE, HOST_CAPABILITY_PROFILE, HOST_CAPABILITY_SCOPED_SOURCE,
+    HOST_CAPABILITY_WORKER, MODULE_HOST_CONTRACT_VERSION, ModuleAction, ModuleAttachment,
+    ModuleHostOutcome, ModuleHostProfile, ModuleHostRequest, ModuleHostResult, ModuleJobLimits,
+    ModuleJobLogPage, ModuleJobPhase, ModuleJobRequest, ModuleJobStatus, ModuleMenuAction,
+    ModuleWorkerLimits, ModuleWorkerRequest, ModuleWorkerResult, ScopedSourceHandle,
+    ScopedSourceManifestPage, ScopedSourceManifestRequest, ScopedSourceReadRequest,
+    ScopedSourceReadResult, ScopedSourceRequest, ScopedSourceRevocation, ScopedSourceRevokeRequest,
     ScopedSourceVerification,
 };
 use records::{
@@ -40,6 +50,51 @@ use state::{ObservationState, PendingRequest, SkeletonCheckpoint, SourceObservat
 const CHECKPOINT_KEY: &str = "red-team-phase-20-complete-journey-v1";
 const COMPATIBILITY_KEY: &str = "red-team-phase-20-host-profile";
 
+/// Executes one module-owned worker in the host-provided disposable source copy.
+pub fn run_worker(name: &str, input: Value) -> Result<Value, Error> {
+    worker::dispatch(name, input).map_err(invalid)
+}
+
+pub(crate) fn job_worker_action(
+    state: &State,
+    key: String,
+    request: ModuleJobRequest,
+) -> Result<ModuleAction, Error> {
+    let source = state
+        .active_handle()
+        .ok_or_else(|| invalid("captured source authority is unavailable for proof execution"))?;
+    if request.source_handle != source.handle || request.scope_revision != source.scope_revision {
+        return Err(invalid("proof request source authority differs from the active scope"));
+    }
+    let source_snapshot = state
+        .active_snapshot()
+        .ok_or_else(|| invalid("captured source snapshot is unavailable for proof execution"))?
+        .snapshot_digest
+        .clone();
+    Ok(ModuleAction::HostService {
+        request: ModuleHostRequest {
+            key,
+            capability: HOST_CAPABILITY_WORKER.into(),
+            version: 1,
+            operation: "execute".into(),
+            input: serde_json::to_value(ModuleWorkerRequest {
+                schema: 1,
+                source,
+                worker: "proof-job".into(),
+                input: json!({"request": request, "source_snapshot": source_snapshot}),
+                runtime_features: Vec::new(),
+                limits: ModuleWorkerLimits {
+                    wall_millis: 30_000,
+                    memory_bytes: 256 * 1024 * 1024,
+                    storage_bytes: 64 * 1024 * 1024,
+                    processes: 16,
+                    open_handles: 64,
+                },
+            })?,
+        },
+    })
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("red-team input: {0}")]
@@ -50,7 +105,7 @@ pub enum Error {
     Json(#[from] serde_json::Error),
 }
 
-/// Dispatches one host-owned native module operation.
+/// Dispatches one module-owned native workflow operation.
 pub fn dispatch(method: &str, parameters: &Value) -> Result<Value, Error> {
     if method == "tool" {
         return if repair::owns_key(parameters) {
@@ -103,10 +158,13 @@ fn command(parameters: &Value) -> Result<ModuleAction, Error> {
     if let Some(direction) = command.strip_prefix("steer ") {
         return investigation::steer(parameters, &mut state, direction);
     }
-    if command == "resume"
-        && !matches!(state.investigation.stage, state::InvestigationStage::NotStarted)
-    {
-        return investigation::resume(parameters, &host, &mut state);
+    if command == "resume" {
+        if let Some(pending) = state.pending.clone() {
+            return resume_pending(&pending, &state);
+        }
+        if !matches!(state.investigation.stage, state::InvestigationStage::NotStarted) {
+            return investigation::resume(parameters, &host, &mut state);
+        }
     }
     if state.pending.is_some() {
         return Ok(reply(
@@ -174,9 +232,6 @@ fn command(parameters: &Value) -> Result<ModuleAction, Error> {
     if command.starts_with("probe ") {
         return submit_probe(parameters, &host, &mut state, command);
     }
-    if command.starts_with("prepare ") {
-        return submit_preparation(parameters, &host, &mut state, command);
-    }
     if command == "jobs" {
         return Ok(reply(jobs(&state), &host, actions(&state), None));
     }
@@ -190,7 +245,7 @@ fn command(parameters: &Value) -> Result<ModuleAction, Error> {
         return cancel_job(parameters, &host, &mut state, command);
     }
     Ok(reply(
-        "Unknown Red Team command. Use campaign-plan, campaign-start, campaign, campaign-next, campaign-pause, campaign-resume, campaign-steer DETAILS, campaign-retry, campaign-skip, campaign-abort, start, status, pause, resume, steer DETAILS, scope, refresh, profiles, surfaces, methods, coverage, analyzers, analyzer-install, analyze, analysis-history, analyzer-status, analyzer-remove, api, api-install, api-run, api-history, api-status, api-remove, browser, browser-install, browser-run, browser-history, browser-status, browser-remove, identity, identity-install, identity-run, identity-history, file-fuzz, file-fuzz-install, file-fuzz-run, file-fuzz-history, file-fuzz-status, file-fuzz-remove, workflow, workflow-install, workflow-run, workflow-history, workflow-status, workflow-remove, boundary, boundary-install, boundary-run, boundary-history, boundary-status, boundary-remove, graph, graph-install, graph-run, graph-history, graph-status, graph-remove, laboratories, lab-create source, lab-prepare, lab-launch, lab-run-auto, lab-run RUNTIME ENTRYPOINT [ARGS...], lab-run-json JSON, lab-status, lab-select VALUE, lab-snapshot, lab-reset, lab-stop, lab-teardown, compatibility fixture commands, adapters, adapter-install diagnostic, adapter-stage diagnostic, adapter-complete, adapter-cancel, adapter-status, adapter-run MESSAGE, adapter-remove, manifest, observe PATH [offset=N] [bytes=N], prepare HTTPS_URL sha256=DIGEST [bytes=N], probe PATH [input=LITERAL], jobs, job ID, job-log ID STREAM [offset=N] [bytes=N], job-cancel ID, findings, patches, report, report-json, sarif, bundle, revoke, compatibility, contract, or checkpoint.",
+        "Unknown Red Team command. Use campaign-plan, campaign-start, campaign, campaign-next, campaign-pause, campaign-resume, campaign-steer DETAILS, campaign-retry, campaign-skip, campaign-abort, start, status, pause, resume, steer DETAILS, scope, refresh, profiles, surfaces, methods, coverage, analyzers, analyzer-install, analyze, analysis-history, analyzer-status, analyzer-remove, api, api-install, api-run, api-history, api-status, api-remove, browser, browser-install, browser-run, browser-history, browser-status, browser-remove, identity, identity-install, identity-run, identity-history, file-fuzz, file-fuzz-install, file-fuzz-run, file-fuzz-history, file-fuzz-status, file-fuzz-remove, workflow, workflow-install, workflow-run, workflow-history, workflow-status, workflow-remove, boundary, boundary-install, boundary-run, boundary-history, boundary-status, boundary-remove, graph, graph-install, graph-run, graph-history, graph-status, graph-remove, laboratories, lab-create source, lab-prepare, lab-launch, lab-run-auto, lab-run RUNTIME ENTRYPOINT [ARGS...], lab-run-json JSON, lab-status, lab-select VALUE, lab-snapshot, lab-reset, lab-stop, lab-teardown, compatibility fixture commands, adapters, adapter-install diagnostic, adapter-stage diagnostic, adapter-complete, adapter-cancel, adapter-status, adapter-run MESSAGE, adapter-remove, manifest, observe PATH [offset=N] [bytes=N], probe PATH [input=LITERAL], jobs, job ID, job-log ID STREAM [offset=N] [bytes=N], job-cancel ID, findings, patches, report, report-json, sarif, bundle, revoke, compatibility, contract, or checkpoint.",
         &host,
         actions(&state),
         None,
@@ -237,50 +292,13 @@ fn route_component_command(
         let attachment = report::publish_report(&state::private_root(parameters)?, state, command)?;
         state::save(parameters, state)?;
         return Ok(reply(
-            "The current bounded delivery was published from retained source observations, findings, host-authored original and patched replay receipts, exact diffs, independent reviews, and the original-workspace comparison. Pending work and every unexamined family remain explicit gaps.",
+            "The current bounded delivery was published from retained source observations, findings, module-authored original and patched replay receipts, exact diffs, independent reviews, and the original-workspace comparison. Pending work and every unexamined family remain explicit gaps.",
             host,
             actions(state),
             Some(attachment),
         ));
     }
     Err(invalid(format!("campaign step uses unsupported command `{command}`")))
-}
-
-fn submit_preparation(
-    parameters: &Value,
-    profile: &Option<ModuleHostProfile>,
-    state: &mut State,
-    command: &str,
-) -> Result<ModuleAction, Error> {
-    if !supports_jobs(profile) {
-        return Ok(jobs_unavailable(profile));
-    }
-    let authority = state
-        .active_handle()
-        .ok_or_else(|| invalid("select source with scope before preparing a dependency"))?;
-    let (url, expected_sha256, maximum_bytes) = parse_preparation(command)?;
-    let key = format!("red-team-preparation-submit-{}", state.jobs.len() + 1);
-    let request = ModuleJobRequest {
-        schema: 1,
-        source_handle: authority.handle,
-        scope_revision: authority.scope_revision,
-        operation: "https.dependency-fetch.v1".into(),
-        specification: json!({
-            "url": url,
-            "expected_sha256": expected_sha256,
-            "maximum_bytes": maximum_bytes,
-        }),
-        limits: ModuleJobLimits {
-            memory_bytes: 128 * 1024 * 1024,
-            storage_bytes: maximum_bytes,
-            cpu_millis: 1_000,
-            wall_millis: 120_000,
-            processes: 1,
-        },
-    };
-    state.pending = Some(PendingRequest::JobSubmit { key: key.clone(), request: request.clone() });
-    state::save(parameters, state)?;
-    Ok(job_service(key, "submit", serde_json::to_value(request)?))
 }
 
 fn submit_probe(
@@ -316,19 +334,11 @@ fn submit_probe(
     };
     state.pending = Some(PendingRequest::JobSubmit { key: key.clone(), request: request.clone() });
     state::save(parameters, state)?;
-    Ok(ModuleAction::HostService {
-        request: ModuleHostRequest {
-            key,
-            capability: HOST_CAPABILITY_OWNED_JOBS.into(),
-            version: 1,
-            operation: "submit".into(),
-            input: serde_json::to_value(request)?,
-        },
-    })
+    job_worker_action(state, key, request)
 }
 
 fn poll_job(
-    parameters: &Value,
+    _parameters: &Value,
     profile: &Option<ModuleHostProfile>,
     state: &mut State,
     command: &str,
@@ -342,15 +352,28 @@ fn poll_job(
         .filter(|value| !value.is_empty())
         .ok_or_else(|| invalid("job command is missing an exact job identity"))?
         .to_owned();
-    let key = format!("red-team-job-poll-{}", &job_id[..job_id.len().min(16)]);
-    let request = ModuleJobStatusRequest { schema: 1, job_id, wait_millis: 750 };
-    state.pending = Some(PendingRequest::JobPoll { key: key.clone(), request: request.clone() });
-    state::save(parameters, state)?;
-    Ok(job_service(key, "poll", serde_json::to_value(request)?))
+    let job = state
+        .jobs
+        .iter()
+        .find(|job| job.host_job_id == job_id)
+        .ok_or_else(|| invalid("job command names no retained module-worker result"))?;
+    Ok(reply(
+        format!(
+            "# Module worker result\n\n- Job: `{}`\n- State: `{:?}`\n- Operation: `{}`\n- Request: `{}`\n- Receipt: `{}`\n\nModule workers return a terminal result in the same bounded call; there is no host-side job to poll.",
+            job.host_job_id,
+            job.state,
+            job.operation,
+            job.request_digest,
+            job.receipt.as_ref().map_or("none", |value| value.value.as_str()),
+        ),
+        profile,
+        actions(state),
+        None,
+    ))
 }
 
 fn job_log(
-    parameters: &Value,
+    _parameters: &Value,
     profile: &Option<ModuleHostProfile>,
     state: &mut State,
     command: &str,
@@ -358,16 +381,24 @@ fn job_log(
     if !supports_jobs(profile) {
         return Ok(jobs_unavailable(profile));
     }
-    let (job_id, stream, offset, maximum_bytes) = parse_job_log(command)?;
-    let key = format!("red-team-job-log-{}", &job_id[..job_id.len().min(16)]);
-    let request = ModuleJobLogRequest { schema: 1, job_id, stream, offset, maximum_bytes };
-    state.pending = Some(PendingRequest::JobLog { key: key.clone(), request: request.clone() });
-    state::save(parameters, state)?;
-    Ok(job_service(key, "log", serde_json::to_value(request)?))
+    let job_id = command
+        .strip_prefix("job-log ")
+        .and_then(|value| value.split_whitespace().next())
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| invalid("job-log command is missing a job identity"))?;
+    if !state.jobs.iter().any(|job| job.host_job_id == job_id) {
+        return Err(invalid("job-log names no retained module-worker result"));
+    }
+    Ok(reply(
+        "Module workers return their bounded stdout and stderr to the module in the same call. Red Team retains the admitted typed receipt, not a separate host-owned log stream.",
+        profile,
+        actions(state),
+        None,
+    ))
 }
 
 fn cancel_job(
-    parameters: &Value,
+    _parameters: &Value,
     profile: &Option<ModuleHostProfile>,
     state: &mut State,
     command: &str,
@@ -381,27 +412,15 @@ fn cancel_job(
         .filter(|value| !value.is_empty())
         .ok_or_else(|| invalid("job-cancel command is missing an exact job identity"))?
         .to_owned();
-    let key = format!("red-team-job-cancel-{}", &job_id[..job_id.len().min(16)]);
-    let request = ModuleJobCancelRequest {
-        schema: 1,
-        job_id,
-        reason: "explicit Red Team user cancellation".into(),
-    };
-    state.pending = Some(PendingRequest::JobCancel { key: key.clone(), request: request.clone() });
-    state::save(parameters, state)?;
-    Ok(job_service(key, "cancel", serde_json::to_value(request)?))
-}
-
-fn job_service(key: String, operation: &str, input: Value) -> ModuleAction {
-    ModuleAction::HostService {
-        request: ModuleHostRequest {
-            key,
-            capability: HOST_CAPABILITY_OWNED_JOBS.into(),
-            version: 1,
-            operation: operation.into(),
-            input,
-        },
+    if !state.jobs.iter().any(|job| job.host_job_id == job_id) {
+        return Err(invalid("job-cancel names no retained module-worker result"));
     }
+    Ok(reply(
+        "The selected module worker is already terminal. Active worker cancellation is the ordinary Peritus run cancellation control; there is no detached host-owned Red Team job.",
+        profile,
+        actions(state),
+        None,
+    ))
 }
 
 fn scope(
@@ -586,43 +605,30 @@ fn revoke(
     })
 }
 
-pub(crate) fn resume_pending(pending: &PendingRequest) -> Result<ModuleAction, Error> {
+pub(crate) fn resume_pending(
+    pending: &PendingRequest,
+    state: &State,
+) -> Result<ModuleAction, Error> {
+    if matches!(
+        pending,
+        PendingRequest::AdapterCatalog { .. }
+            | PendingRequest::AdapterPrepare { .. }
+            | PendingRequest::AdapterComplete { .. }
+            | PendingRequest::AdapterCancel { .. }
+            | PendingRequest::AdapterStatus { .. }
+            | PendingRequest::AdapterRemove { .. }
+            | PendingRequest::AdapterExecute { .. }
+    ) {
+        return adapter::resume_worker(state, pending);
+    }
     let (capability, operation, input) = match pending {
-        PendingRequest::AdapterCatalog { .. } => (
-            HOST_CAPABILITY_ADAPTER_RUNTIME,
-            "catalog",
-            json!({}),
-        ),
-        PendingRequest::AdapterPrepare { request, .. } => (
-            HOST_CAPABILITY_ADAPTER_RUNTIME,
-            "prepare",
-            serde_json::to_value(request)?,
-        ),
-        PendingRequest::AdapterComplete { request, .. } => (
-            HOST_CAPABILITY_ADAPTER_RUNTIME,
-            "complete",
-            serde_json::to_value(request)?,
-        ),
-        PendingRequest::AdapterCancel { request, .. } => (
-            HOST_CAPABILITY_ADAPTER_RUNTIME,
-            "cancel",
-            serde_json::to_value(request)?,
-        ),
-        PendingRequest::AdapterStatus { request, .. } => (
-            HOST_CAPABILITY_ADAPTER_RUNTIME,
-            "status",
-            serde_json::to_value(request)?,
-        ),
-        PendingRequest::AdapterRemove { request, .. } => (
-            HOST_CAPABILITY_ADAPTER_RUNTIME,
-            "remove",
-            serde_json::to_value(request)?,
-        ),
-        PendingRequest::AdapterExecute { request, .. } => (
-            HOST_CAPABILITY_ADAPTER_RUNTIME,
-            "execute",
-            serde_json::to_value(request)?,
-        ),
+        PendingRequest::AdapterCatalog { .. }
+        | PendingRequest::AdapterPrepare { .. }
+        | PendingRequest::AdapterComplete { .. }
+        | PendingRequest::AdapterCancel { .. }
+        | PendingRequest::AdapterStatus { .. }
+        | PendingRequest::AdapterRemove { .. }
+        | PendingRequest::AdapterExecute { .. } => unreachable!("handled above"),
         PendingRequest::LaboratoryCatalog { .. } => (
             HOST_CAPABILITY_APPLICATION_LABORATORY,
             "catalog",
@@ -693,26 +699,16 @@ pub(crate) fn resume_pending(pending: &PendingRequest) -> Result<ModuleAction, E
                 authority: authority.clone(),
             })?,
         ),
-        PendingRequest::JobSubmit { request, .. } => (
-            HOST_CAPABILITY_OWNED_JOBS,
-            "submit",
-            serde_json::to_value(request)?,
-        ),
-        PendingRequest::JobPoll { request, .. } => (
-            HOST_CAPABILITY_OWNED_JOBS,
-            "poll",
-            serde_json::to_value(request)?,
-        ),
-        PendingRequest::JobLog { request, .. } => (
-            HOST_CAPABILITY_OWNED_JOBS,
-            "log",
-            serde_json::to_value(request)?,
-        ),
-        PendingRequest::JobCancel { request, .. } => (
-            HOST_CAPABILITY_OWNED_JOBS,
-            "cancel",
-            serde_json::to_value(request)?,
-        ),
+        PendingRequest::JobSubmit { key, request } => {
+            return job_worker_action(state, key.clone(), request.clone());
+        }
+        PendingRequest::JobPoll { .. }
+        | PendingRequest::JobLog { .. }
+        | PendingRequest::JobCancel { .. } => {
+            return Err(invalid(
+                "legacy asynchronous Red Team job state cannot be resumed; current module workers return a terminal result in the same bounded call",
+            ));
+        }
         PendingRequest::SourceVerify { request, .. } => (
             HOST_CAPABILITY_SCOPED_SOURCE,
             "verify",
@@ -757,7 +753,7 @@ fn host_result(parameters: &Value) -> Result<ModuleAction, Error> {
         ModuleHostOutcome::Success { output } => output,
         ModuleHostOutcome::Unsupported { detail } => {
             state.pending = None;
-            if expected_capability == HOST_CAPABILITY_ADAPTER_RUNTIME {
+            if expected_capability == HOST_CAPABILITY_WORKER {
                 state.adapter_errors.push(format!("unsupported: {detail}"));
             }
             if expected_capability == HOST_CAPABILITY_APPLICATION_LABORATORY {
@@ -785,7 +781,7 @@ fn host_result(parameters: &Value) -> Result<ModuleAction, Error> {
         }
         ModuleHostOutcome::Rejected { code, detail } => {
             state.pending = None;
-            if expected_capability == HOST_CAPABILITY_ADAPTER_RUNTIME {
+            if expected_capability == HOST_CAPABILITY_WORKER {
                 state.adapter_errors.push(format!("{code}: {detail}"));
             }
             if expected_capability == HOST_CAPABILITY_APPLICATION_LABORATORY {
@@ -817,7 +813,7 @@ fn host_result(parameters: &Value) -> Result<ModuleAction, Error> {
         }
         ModuleHostOutcome::Failed { code, detail, retryable_with_new_action } => {
             state.pending = None;
-            if expected_capability == HOST_CAPABILITY_ADAPTER_RUNTIME {
+            if expected_capability == HOST_CAPABILITY_WORKER {
                 state.adapter_errors.push(format!("{code}: {detail}"));
             }
             if expected_capability == HOST_CAPABILITY_APPLICATION_LABORATORY {
@@ -855,8 +851,48 @@ fn host_result(parameters: &Value) -> Result<ModuleAction, Error> {
             ));
         }
     };
-    if expected_capability == HOST_CAPABILITY_ADAPTER_RUNTIME {
-        return adapter::admit(parameters, &host, &mut state, pending, output);
+    if expected_capability == HOST_CAPABILITY_WORKER {
+        let worker: ModuleWorkerResult = serde_json::from_value(output)?;
+        let expected_worker = if matches!(pending, PendingRequest::JobSubmit { .. }) {
+            "proof-job"
+        } else {
+            "adapter-runtime"
+        };
+        if worker.schema != 1
+            || worker.worker != expected_worker
+            || worker.exit_code != Some(0)
+            || !worker.cleanup_complete
+            || !worker.original_source_unchanged
+            || worker.execution_plan_digest.len() != 64
+            || !worker.stderr.is_empty()
+        {
+            return Err(invalid(
+                "module worker did not complete cleanly against an unchanged original source",
+            ));
+        }
+        let output = serde_json::from_slice(&worker.stdout)?;
+        if expected_worker == "adapter-runtime" {
+            return adapter::admit(parameters, &host, &mut state, pending, output);
+        }
+        let status: ModuleJobStatus = serde_json::from_value(output)?;
+        admit_job_status(&mut state, &status)?;
+        if result.key.starts_with("red-team-repair-submit-") {
+            repair::job_submitted(&mut state, &status.job_id);
+            let _ = repair::job_status(&mut state, &status)?;
+            state.pending = None;
+            state::save(parameters, &state)?;
+            return repair::next(parameters, &host, &mut state);
+        }
+        if result.key.starts_with("red-team-investigation-submit-") {
+            investigation::job_submitted(&mut state, &status.job_id);
+            let _ = investigation::job_status(&mut state, &status);
+            state.pending = None;
+            state::save(parameters, &state)?;
+            return investigation::next(parameters, &host, &mut state);
+        }
+        state.pending = None;
+        state::save(parameters, &state)?;
+        return Ok(reply(job_status_text(&status), &host, actions(&state), None));
     }
     if expected_capability == HOST_CAPABILITY_APPLICATION_LABORATORY {
         return laboratory::admit(parameters, &host, &mut state, pending, output);
@@ -967,28 +1003,7 @@ fn host_result(parameters: &Value) -> Result<ModuleAction, Error> {
             )
         }
         PendingRequest::JobSubmit { .. } => {
-            let handle: ModuleJobHandle = serde_json::from_value(output)?;
-            if result.key.starts_with("red-team-repair-submit-") {
-                repair::job_submitted(&mut state, &handle.job_id);
-                state.pending = None;
-                let action = repair::poll_action(&mut state, handle.job_id)?;
-                state::save(parameters, &state)?;
-                return Ok(action);
-            }
-            if result.key.starts_with("red-team-investigation-submit-") {
-                investigation::job_submitted(&mut state, &handle.job_id);
-                state.pending = None;
-                let action = investigation::poll_action(&mut state, handle.job_id)?;
-                state::save(parameters, &state)?;
-                return Ok(action);
-            }
-            let key = format!("red-team-job-poll-{}", &handle.job_id[..16]);
-            let request =
-                ModuleJobStatusRequest { schema: 1, job_id: handle.job_id, wait_millis: 750 };
-            state.pending =
-                Some(PendingRequest::JobPoll { key: key.clone(), request: request.clone() });
-            state::save(parameters, &state)?;
-            return Ok(job_service(key, "poll", serde_json::to_value(request)?));
+            return Err(invalid("proof-job result bypassed the generic worker admission path"));
         }
         PendingRequest::JobPoll { .. } | PendingRequest::JobCancel { .. } => {
             let status: ModuleJobStatus = serde_json::from_value(output)?;
@@ -1060,7 +1075,7 @@ fn pending_capability(pending: &PendingRequest) -> &'static str {
         | PendingRequest::AdapterCancel { .. }
         | PendingRequest::AdapterStatus { .. }
         | PendingRequest::AdapterRemove { .. }
-        | PendingRequest::AdapterExecute { .. } => HOST_CAPABILITY_ADAPTER_RUNTIME,
+        | PendingRequest::AdapterExecute { .. } => HOST_CAPABILITY_WORKER,
         PendingRequest::LaboratoryCatalog { .. }
         | PendingRequest::LaboratoryCreate { .. }
         | PendingRequest::LaboratorySourceCreate { .. }
@@ -1071,10 +1086,10 @@ fn pending_capability(pending: &PendingRequest) -> &'static str {
         | PendingRequest::Read { .. }
         | PendingRequest::Revoke { .. }
         | PendingRequest::SourceVerify { .. } => HOST_CAPABILITY_SCOPED_SOURCE,
-        PendingRequest::JobSubmit { .. }
-        | PendingRequest::JobPoll { .. }
+        PendingRequest::JobSubmit { .. } => HOST_CAPABILITY_WORKER,
+        PendingRequest::JobPoll { .. }
         | PendingRequest::JobLog { .. }
-        | PendingRequest::JobCancel { .. } => HOST_CAPABILITY_OWNED_JOBS,
+        | PendingRequest::JobCancel { .. } => HOST_CAPABILITY_WORKER,
     }
 }
 
@@ -1404,7 +1419,7 @@ fn checkpoint(
     state::save(parameters, &state)?;
     Ok(ModuleAction::Checkpoint {
         key: CHECKPOINT_KEY.into(),
-        text: "Red Team checkpoint was written to private module state. It retains exact source observations, pinned static-analysis leads, host-captured class-specific receipts, cross-adapter graph edges and counterfactuals, laboratory identities/status/receipts, copy-only patches, adapter replay receipts, independent reviews, original-byte proof, reuse measurements, and explicit gaps.".into(),
+        text: "Red Team checkpoint was written to private module state. It retains exact source observations, pinned static-analysis leads, module-captured class-specific receipts, cross-adapter graph edges and counterfactuals, laboratory identities/status/receipts, copy-only patches, adapter replay receipts, independent reviews, original-byte proof, reuse measurements, and explicit gaps.".into(),
         actions: actions(&state),
     })
 }
@@ -1445,7 +1460,7 @@ fn status(state: &State) -> String {
         .filter(|job| matches!(job.state, records::JobState::Queued | records::JobState::Running))
         .count();
     format!(
-        "# Red Team investigation and repair\n\n- Module: `peritus.red-team` {}\n- Durable schema: v{}\n- Campaign state: `{:?}`\n- Investigation stage: `{:?}`\n- Repair stage: `{:?}`\n- Complete-journey stage: `{:?}`\n- Complete-journey progress: {}/{}\n- Complete-journey gaps/failures: {}\n- Paused: {}\n- Scope revision: `{}`\n- Source snapshot: `{}`\n- Manifest artifact: `{}`\n- Current source observations: {}\n- Invalidated source observations: {}\n- Target profiles: {}\n- Application surfaces: {}\n- Method-backed coverage cells: {}\n- Coverage cells examined: {}\n- Coverage cells blocked: {}\n- Managed adapter lifecycle observations: {}\n- Adapter execution receipts: {}\n- Static-analysis observations: {}\n- Static-analysis source evidence: {}\n- HTTP/API campaigns: {}\n- HTTP/API evidence records: {}\n- Browser campaigns: {}\n- Identity/access campaigns: {}\n- File/parser campaigns: {}\n- Workflow/state campaigns: {}\n- Boundary/authority campaigns: {}\n- Boundary/authority evidence records: {}\n- Attack-graph campaigns: {}\n- Attack-graph evidence records: {}\n- Retained adapter errors: {}\n- Laboratory lifecycle observations: {}\n- Laboratory operation receipts: {}\n- Retained laboratory errors: {}\n- Latest laboratory phase: `{}`\n- Retained hypotheses: {}\n- Retained probes: {}\n- Retained host-owned jobs: {}\n- Active host-owned jobs: {}\n- Trusted job receipts: {}\n- Skeptically adjudicated findings: {}\n- Patch revisions: {}\n- Patch replay receipts: {}\n- Original workspace unchanged: {}\n- Security families unexamined: {}\n- Reused exact source reads: {}\n- Foundation checkpoint: {}\n\nThe source handle is revocable. Managed adapters require exact registered descriptors, content identities, platforms, operations and host receipt decoders. Static analysis uses immutable source, pinned host rules and redacted source-only leads; it never establishes runtime exploitability. Runtime adapters can reach only ready opaque disposable-laboratory endpoints; the host captures protocol bytes, copied state, private peer effects, and explicit unavailable-platform gaps while denying ambient network, credentials, privilege, and host tools. Cross-adapter graph search admits only receipt-backed edges, preserves broken and rejected paths, and accepts copy-only repair only after exact source, HTTP, and real-browser replay. Application laboratories require copied immutable source, opaque handles, private host-owned isolation, real readiness, state readback, reset, process cleanup and original-source proof. The complete journey schedules only one host operation at a time; steering text and target output remain untrusted and cannot widen authority. Every model role receives the canonical skill directly. The Rust coordinator alone admits source observations, host-authored original and patched execution receipts, classifications, coverage transitions, patch states, and before/after proof; unsuccessful attempts do not establish safety.",
+        "# Red Team investigation and repair\n\n- Module: `peritus.red-team` {}\n- Durable schema: v{}\n- Campaign state: `{:?}`\n- Investigation stage: `{:?}`\n- Repair stage: `{:?}`\n- Complete-journey stage: `{:?}`\n- Complete-journey progress: {}/{}\n- Complete-journey gaps/failures: {}\n- Paused: {}\n- Scope revision: `{}`\n- Source snapshot: `{}`\n- Manifest artifact: `{}`\n- Current source observations: {}\n- Invalidated source observations: {}\n- Target profiles: {}\n- Application surfaces: {}\n- Method-backed coverage cells: {}\n- Coverage cells examined: {}\n- Coverage cells blocked: {}\n- Managed adapter lifecycle observations: {}\n- Adapter execution receipts: {}\n- Static-analysis observations: {}\n- Static-analysis source evidence: {}\n- HTTP/API campaigns: {}\n- HTTP/API evidence records: {}\n- Browser campaigns: {}\n- Identity/access campaigns: {}\n- File/parser campaigns: {}\n- Workflow/state campaigns: {}\n- Boundary/authority campaigns: {}\n- Boundary/authority evidence records: {}\n- Attack-graph campaigns: {}\n- Attack-graph evidence records: {}\n- Retained adapter errors: {}\n- Laboratory lifecycle observations: {}\n- Laboratory operation receipts: {}\n- Retained laboratory errors: {}\n- Latest laboratory phase: `{}`\n- Retained hypotheses: {}\n- Retained probes: {}\n- Retained module worker operations: {}\n- Active module worker operations: {}\n- Trusted job receipts: {}\n- Skeptically adjudicated findings: {}\n- Patch revisions: {}\n- Patch replay receipts: {}\n- Original workspace unchanged: {}\n- Security families unexamined: {}\n- Reused exact source reads: {}\n- Foundation checkpoint: {}\n\nThe source handle is revocable. Managed adapters require exact registered descriptors, content identities, platforms, operations and module receipt decoders. Static analysis uses immutable source, pinned module rules and redacted source-only leads; it never establishes runtime exploitability. Runtime adapters can reach only ready opaque disposable-laboratory endpoints; the module captures protocol bytes, copied state, private peer effects, and explicit unavailable-platform gaps while denying ambient network, credentials, privilege, and host tools. Cross-adapter graph search admits only receipt-backed edges, preserves broken and rejected paths, and accepts copy-only repair only after exact source, HTTP, and real-browser replay. Application laboratories require copied immutable source, opaque handles, generic host containment and module-owned target execution, real readiness, state readback, reset, process cleanup and original-source proof. The complete journey schedules only one module operation at a time; steering text and target output remain untrusted and cannot widen authority. Every model role receives the canonical skill directly. The Rust coordinator alone admits source observations, module-authored original and patched execution receipts, classifications, coverage transitions, patch states, and before/after proof; unsuccessful attempts do not establish safety.",
         state.module_version,
         state.schema,
         state.campaign.state,
@@ -1581,7 +1596,7 @@ fn patches(state: &State) -> String {
 
 fn contract(profile: &Option<ModuleHostProfile>) -> Result<ModuleAction, Error> {
     Ok(reply(
-        "# Red Team host contract\n\nThe host binds source capture to the explicitly opened Peritus workspace, then admits only stable job adapters over an exact source handle and revision. Managed adapter runtimes are additive: the host registry must match every descriptor, digest, platform, operation, schema and receipt decoder before private content-addressed installation or execution. The registered static-analysis adapter reads only immutable scoped-source artifacts under host-enforced file and byte bounds; it records exact analyzer, rule and advisory identities, redacts possible secrets, and can emit only source leads—not runtime-confirmed findings. Disposable application laboratories are also host-owned: the module may select an advertised recipe and exact source files, but only the host resolves copied paths, process plans, private service routing, endpoint handles, test identities and target-only secret material. The Linux recipes launch copied services with cleared environment, private filesystem, bounded descendants and resources, IP deny-all, private Unix sockets, host-side readiness and state oracles, snapshots, reset, cleanup and original-source verification. The registered HTTP/API adapter can address only an exact ready HTTP laboratory. The host emits and captures HTTP/1.1 and WebSocket bytes directly, imports the live OpenAPI document, observes copied state before and after requests, blocks target-only values from module output, and distinguishes ordinary success, rejected input, unreachable routes and independently confirmed violations. The boundary-authority adapter additionally creates private Unix-socket DNS, redirect, callback, proxy, and TLS peers plus lab-only certificates. Targets never receive routable peer addresses or host authority; public, LAN, loopback, cloud-provider, and host-privileged effects stay denied or explicitly blocked. The attack-graph adapter composes only raw host receipts from exact source, private HTTP, and an isolated browser; every edge names its evidence, a separate skeptic rejects unsupported edges, a counterfactual removes a prerequisite, and an independent repair reviewer accepts an exact copy-only diff only after all registered adapter replays pass with legitimate behavior preserved. No operation can name a host executable, ambient endpoint, container, credential, network policy or fallback. The coordinator performs one bounded inventory, delivers the canonical skill to separately persisted discovery, skeptic, fixer, and patch-reviewer contexts, registers hypotheses before execution, and routes all effects through revocable scoped-source or host-owned services. The host-generated canary and evaluator remain outside target control. For confirmed findings, a fixer may propose an exact-preimage replacement, but the host alone constructs the unified diff and materializes it in disposable private job storage. Attack, legitimate, malformed and adjacent cases must preserve declared positive behavior while the violation is absent. An independent reviewer sees the exact diff and raw receipts. Final verification rereads the selected original workspace against the starting path, byte, and executable-bit manifest. TUI and GUI consume the same exact-run actions, concrete progress, durable summaries and user-selected export identity. The module exports Markdown, JSON, exact patches and a replay bundle; it cannot edit, commit, push, deploy or disclose the original project.",
+        "# Red Team module boundary\n\nPeritus supplies generic module lifecycle, revocable scoped-source authority, complete disposable source copies, bounded opaque worker execution, persistence, original-source comparison, and common TUI/WebUI transport. It does not know Red Team adapter names, security classes, target recipes, evidence schemas, canaries, or finding rules.\n\nThe Red Team module owns its adapter registry and implementations; deterministic source analysis; target selection and launch inside the disposable worker copy; HTTP, browser, identity, file/parser, workflow, boundary, and attack-graph campaigns; module-private credentials and canaries; response/state oracles; evidence admission; skeptic decisions; copy-only repair replay; and reports. Adapter input and output are opaque JSON to Peritus.\n\nThe generic host still enforces the outer safety boundary: only explicitly scoped source is copied, worker resources and lifetime are bounded, ambient credentials and networking are denied, cleanup is observed, and the selected original workspace is compared after execution. The module cannot edit, commit, push, deploy, or publish the original project. Applying a returned patch is a separate user action.",
         profile,
         base_actions(),
         None,
@@ -1608,10 +1623,9 @@ fn reply(
 fn compatibility_text(profile: &ModuleHostProfile) -> String {
     let source =
         if profile.supports(HOST_CAPABILITY_SCOPED_SOURCE, 1) { "available" } else { "missing" };
-    let jobs =
-        if profile.supports(HOST_CAPABILITY_OWNED_JOBS, 1) { "available" } else { "missing" };
+    let jobs = if profile.supports(HOST_CAPABILITY_WORKER, 1) { "available" } else { "missing" };
     let adapters =
-        if profile.supports(HOST_CAPABILITY_ADAPTER_RUNTIME, 1) { "available" } else { "missing" };
+        if profile.supports(HOST_CAPABILITY_WORKER, 1) { "available" } else { "missing" };
     let laboratories = if profile.supports(HOST_CAPABILITY_APPLICATION_LABORATORY, 1) {
         "available"
     } else {
@@ -1619,17 +1633,16 @@ fn compatibility_text(profile: &ModuleHostProfile) -> String {
     };
     let required = [
         HOST_CAPABILITY_SCOPED_SOURCE,
-        HOST_CAPABILITY_OWNED_JOBS,
         HOST_CAPABILITY_CHECKPOINT,
         HOST_CAPABILITY_PRIVATE_STATE,
-        HOST_CAPABILITY_ADAPTER_RUNTIME,
+        HOST_CAPABILITY_WORKER,
         HOST_CAPABILITY_APPLICATION_LABORATORY,
     ]
     .into_iter()
     .filter(|name| !profile.supports(name, 1))
     .collect::<Vec<_>>();
     format!(
-        "# Red Team host compatibility\n\nScoped source: **{source}**.\n\nContained proof and copy-only replay jobs: **{jobs}**.\n\nManaged adapter runtime: **{adapters}**.\n\nDisposable application laboratory: **{laboratories}**.\n\nAvailable v1 capabilities: {}.\n\nMissing required runtime capabilities: {}.\n\nSource-build capability is used by the module market before installation, not by a running investigation. Missing capabilities do not cause ambient filesystem, process, container, endpoint or network fallback.",
+        "# Red Team host compatibility\n\nScoped source: **{source}**.\n\nModule-owned proof and copy-only replay workers: **{jobs}**.\n\nModule-owned adapter runtime: **{adapters}**.\n\nGeneric disposable application laboratory: **{laboratories}**.\n\nAvailable v1 capabilities: {}.\n\nMissing required generic capabilities: {}.\n\nSource-build capability is used by the module market before installation, not by a running investigation. Missing capabilities do not cause ambient filesystem, process, container, endpoint or network fallback.",
         capability_names(profile).join(", "),
         list_or_none(&required),
     )
@@ -1640,7 +1653,7 @@ fn supports_source(profile: &Option<ModuleHostProfile>) -> bool {
 }
 
 fn supports_jobs(profile: &Option<ModuleHostProfile>) -> bool {
-    profile.as_ref().is_some_and(|profile| profile.supports(HOST_CAPABILITY_OWNED_JOBS, 1))
+    profile.as_ref().is_some_and(|profile| profile.supports(HOST_CAPABILITY_WORKER, 1))
 }
 
 fn source_unavailable(profile: &Option<ModuleHostProfile>) -> ModuleAction {
@@ -1654,7 +1667,7 @@ fn source_unavailable(profile: &Option<ModuleHostProfile>) -> ModuleAction {
 
 fn jobs_unavailable(profile: &Option<ModuleHostProfile>) -> ModuleAction {
     reply(
-        "This Peritus host does not advertise `module.owned-jobs@1`. Red Team will not execute the target through a raw command or unrestricted fallback.",
+        "This Peritus host does not advertise `module.worker@1`. Red Team will not execute the target through a raw command or unrestricted fallback.",
         profile,
         base_actions(),
         None,
@@ -1882,65 +1895,9 @@ fn parse_probe(command: &str) -> Result<(String, String), Error> {
     Ok((path.to_owned(), input.to_owned()))
 }
 
-fn parse_preparation(command: &str) -> Result<(String, String, u64), Error> {
-    let mut values = command
-        .strip_prefix("prepare ")
-        .map(str::split_whitespace)
-        .ok_or_else(|| invalid("prepare command is malformed"))?;
-    let url = values
-        .next()
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| invalid("prepare command is missing an HTTPS URL"))?
-        .to_owned();
-    let mut expected_sha256 = None;
-    let mut maximum_bytes = 16 * 1024 * 1024_u64;
-    for value in values {
-        if let Some(value) = value.strip_prefix("sha256=") {
-            expected_sha256 = Some(value.to_owned());
-        } else if let Some(value) = value.strip_prefix("bytes=") {
-            maximum_bytes =
-                value.parse().map_err(|_| invalid("prepare bytes must be an integer"))?;
-        } else {
-            return Err(invalid("prepare accepts only sha256=DIGEST and bytes=N options"));
-        }
-    }
-    let expected_sha256 =
-        expected_sha256.ok_or_else(|| invalid("prepare requires sha256=DIGEST"))?;
-    Ok((url, expected_sha256, maximum_bytes))
-}
-
-fn parse_job_log(command: &str) -> Result<(String, ModuleJobStream, u64, u64), Error> {
-    let mut values = command
-        .strip_prefix("job-log ")
-        .ok_or_else(|| invalid("job-log command is malformed"))?
-        .split_whitespace();
-    let job_id = values
-        .next()
-        .ok_or_else(|| invalid("job-log command is missing a job identity"))?
-        .to_owned();
-    let stream = match values.next().unwrap_or("stdout") {
-        "stdout" => ModuleJobStream::Stdout,
-        "stderr" => ModuleJobStream::Stderr,
-        "controller" => ModuleJobStream::Controller,
-        _ => return Err(invalid("job-log stream must be stdout, stderr, or controller")),
-    };
-    let mut offset = 0_u64;
-    let mut maximum = 4096_u64;
-    for value in values {
-        if let Some(value) = value.strip_prefix("offset=") {
-            offset = value.parse().map_err(|_| invalid("job-log offset must be an integer"))?;
-        } else if let Some(value) = value.strip_prefix("bytes=") {
-            maximum = value.parse().map_err(|_| invalid("job-log bytes must be an integer"))?;
-        } else {
-            return Err(invalid("job-log accepts only offset=N and bytes=N options"));
-        }
-    }
-    Ok((job_id, stream, offset, maximum))
-}
-
 fn jobs(state: &State) -> String {
     if state.jobs.is_empty() {
-        return "# Contained jobs\n\nNo job receipt has been observed. Use `prepare HTTPS_URL sha256=DIGEST [bytes=N]` or `probe SOURCE_PATH [input=LITERAL]` after selecting source.".into();
+        return "# Contained jobs\n\nNo worker receipt has been observed. Use `probe SOURCE_PATH [input=LITERAL]` after selecting source.".into();
     }
     let mut text = "# Contained jobs\n\n".to_owned();
     for job in &state.jobs {
