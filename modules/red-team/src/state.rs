@@ -17,6 +17,7 @@ use peritus_plugin_sdk::{
 };
 use serde::{Deserialize, Serialize};
 use std::{
+    collections::BTreeMap,
     fs,
     io::Write as _,
     path::{Path, PathBuf},
@@ -354,6 +355,8 @@ pub(crate) struct InventoryRecord {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct FamilyRoute {
+    #[serde(default)]
+    pub(crate) profile: String,
     pub(crate) family: String,
     pub(crate) state: CoverageState,
     pub(crate) reason: String,
@@ -373,7 +376,26 @@ pub(crate) struct HypothesisPlan {
     pub(crate) family: String,
     pub(crate) origin: HypothesisOrigin,
     pub(crate) source_evidence: Vec<RecordId>,
+    /// Generic disposable-laboratory runtime for source manifests and interpreted entry points.
+    /// Older retained plans omit this and continue through the direct executable worker.
+    #[serde(default)]
+    pub(crate) runtime: Option<String>,
     pub(crate) target_path: Option<String>,
+    /// Exact literal argv delivered after the module-owned runtime launcher.
+    /// `{{PERITUS_CANARY}}` is replaced only inside this private plan at execution time.
+    #[serde(default)]
+    pub(crate) arguments: Vec<String>,
+    /// Optional exact stdin template. `{{PERITUS_CANARY}}` has the same private substitution
+    /// semantics as it does in `arguments`.
+    #[serde(default)]
+    pub(crate) stdin: Option<String>,
+    /// Exact literal environment delivered to the disposable process. Values stay in private
+    /// campaign state; reports retain only names and digests. `{{PERITUS_CANARY}}` has the same
+    /// private substitution semantics as it does in `arguments` and `stdin`.
+    #[serde(default)]
+    pub(crate) environment: BTreeMap<String, String>,
+    /// Compatibility field for plans retained before argv vectors were introduced.
+    #[serde(default)]
     pub(crate) attacker_input: Option<String>,
     pub(crate) changed_dimension: String,
 }
@@ -393,6 +415,15 @@ pub(crate) struct ProbeAttempt {
     pub(crate) id: String,
     pub(crate) hypothesis_id: String,
     pub(crate) target_path: String,
+    #[serde(default)]
+    pub(crate) arguments: Vec<String>,
+    #[serde(default)]
+    pub(crate) stdin_digest: Option<String>,
+    /// Environment values are deliberately absent from report-facing probe records.
+    #[serde(default)]
+    pub(crate) environment_digests: BTreeMap<String, String>,
+    /// Compatibility summary for older reports and retained state.
+    #[serde(default)]
     pub(crate) attacker_input: String,
     pub(crate) changed_dimension: String,
     pub(crate) state: ProbeState,

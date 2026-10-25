@@ -1093,7 +1093,7 @@ fn pending_capability(pending: &PendingRequest) -> &'static str {
     }
 }
 
-fn admit_job_status(state: &mut State, status: &ModuleJobStatus) -> Result<(), Error> {
+pub(crate) fn admit_job_status(state: &mut State, status: &ModuleJobStatus) -> Result<(), Error> {
     let scope = state
         .scopes
         .last()
@@ -1807,8 +1807,8 @@ fn actions(state: &State) -> Vec<ModuleMenuAction> {
 
 fn base_actions() -> Vec<ModuleMenuAction> {
     let mut result = vec![
-        action("View complete campaign plan", "campaign-plan", true),
-        action("Start complete campaign", "campaign-start", true),
+        action("View source-bound campaign plan", "campaign-plan", true),
+        action("Start source-bound campaign", "campaign-start", true),
         action("Status", "status", true),
         action("Static analyzer support", "analyzers", true),
         action("Install static analyzers", "analyzer-install", true),

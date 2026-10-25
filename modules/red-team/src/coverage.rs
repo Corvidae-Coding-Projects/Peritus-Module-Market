@@ -345,6 +345,7 @@ pub(crate) struct PropertyInput {
 #[derive(Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct RouteInput {
+    profile: String,
     family: String,
     state: String,
     reason: String,
@@ -400,7 +401,7 @@ pub(crate) fn compile(
     let property_ids = by_name(&properties, |record| (&record.id.value, &record.id))?;
     let methods = methods(&campaign);
     let method_ids = by_name(&methods, |record| (&record.name, &record.id))?;
-    let routes = validate_routes(&input.routes)?;
+    let routes = validate_routes(&input.routes, &input.profiles)?;
 
     let old_cells = state
         .coverage_cells
@@ -416,9 +417,17 @@ pub(crate) fn compile(
     let mut cells = Vec::new();
     for route in &routes {
         let route_state = route_state(&route.state)?;
+        let mut compatible_methods = BTreeSet::new();
         for surface_name in &route.surfaces {
             let surface_id = required_name(&surface_ids, surface_name, "surface")?.clone();
             let surface = surface_records.get(&surface_id).expect("compiled surface identity");
+            let route_profile = required_name(&profile_ids, &route.profile, "profile")?;
+            if &surface.profile != route_profile {
+                return Err(invalid(format!(
+                    "surface `{surface_name}` does not belong to route profile `{}`",
+                    route.profile
+                )));
+            }
             let component =
                 component_records.get(&surface.component).expect("compiled component identity");
             if component.profile != surface.profile {
@@ -433,6 +442,12 @@ pub(crate) fn compile(
                 if identity.profile != surface.profile {
                     return Err(invalid(format!(
                         "identity `{identity_name}` and surface `{surface_name}` belong to different target profiles"
+                    )));
+                }
+                if &identity.profile != route_profile {
+                    return Err(invalid(format!(
+                        "identity `{identity_name}` does not belong to route profile `{}`",
+                        route.profile
                     )));
                 }
                 for property_name in &route.properties {
@@ -450,7 +465,10 @@ pub(crate) fn compile(
                         let method_id = required_name(&method_ids, method_name, "method")?.clone();
                         let method =
                             method_records.get(&method_id).expect("compiled method identity");
-                        validate_compatibility(method, surface, property)?;
+                        if !is_compatible(method, surface, property) {
+                            continue;
+                        }
+                        compatible_methods.insert(method.name.as_str());
                         let id = stable_id(
                             RecordKind::CoverageCell,
                             "cell",
@@ -502,6 +520,14 @@ pub(crate) fn compile(
                 }
             }
         }
+        for method_name in &route.methods {
+            if !compatible_methods.contains(method_name.as_str()) {
+                return Err(invalid(format!(
+                    "method `{method_name}` has no compatible surface/property pair in the `{}`/`{}` route; command/native canary coverage may share a route with other surfaces, but it must name at least one command/native surface and an ASVS 5.0.0 V14.2.6 or CWE 4.18 CWE-200 property",
+                    route.profile, route.family
+                )));
+            }
+        }
     }
     if cells.is_empty() {
         return Err(invalid("coverage compiler produced no coverage cells"));
@@ -527,6 +553,7 @@ pub(crate) fn compile(
         routes: routes
             .into_iter()
             .map(|route| FamilyRoute {
+                profile: route.profile,
                 family: route.family,
                 state: route_state(&route.state).expect("validated route state"),
                 reason: route.reason,
@@ -950,7 +977,12 @@ fn compile_properties(
         .iter()
         .map(|value| {
             if !security_families().contains(&value.family.as_str()) {
-                return Err(invalid(format!("property `{}` uses an unknown family", value.id)));
+                return Err(invalid(format!(
+                    "property `{}` uses unknown family `{}`; allowed families: {}",
+                    value.id,
+                    value.family,
+                    security_families().join(", ")
+                )));
             }
             validate_text(&value.statement, "security property")?;
             if value.standards.is_empty() {
@@ -1068,14 +1100,26 @@ fn methods(campaign: &RecordId) -> Vec<MethodRecord> {
     .collect()
 }
 
-fn validate_routes(values: &[RouteInput]) -> Result<Vec<RouteInput>, Error> {
-    if values.len() != security_families().len() {
-        return Err(invalid("inventory must route every supported security family exactly once"));
-    }
-    let expected = security_families().into_iter().collect::<BTreeSet<_>>();
-    let actual = values.iter().map(|route| route.family.as_str()).collect::<BTreeSet<_>>();
+fn validate_routes(
+    values: &[RouteInput],
+    profiles: &[ProfileInput],
+) -> Result<Vec<RouteInput>, Error> {
+    let expected = profiles
+        .iter()
+        .flat_map(|profile| {
+            security_families().into_iter().map(move |family| (profile.name.as_str(), family))
+        })
+        .collect::<BTreeSet<_>>();
+    let actual = values
+        .iter()
+        .map(|route| (route.profile.as_str(), route.family.as_str()))
+        .collect::<BTreeSet<_>>();
     if actual != expected || actual.len() != values.len() {
-        return Err(invalid("inventory family routes are missing, duplicated, or unknown"));
+        return Err(invalid(format!(
+            "inventory must contain exactly one route for every target-profile and security-family pair (expected {}, received {}); never mix profiles within a route",
+            expected.len(),
+            values.len()
+        )));
     }
     for route in values {
         if route.state == "examined" {
@@ -1128,40 +1172,31 @@ fn validate_standard(value: &StandardReference) -> Result<(), Error> {
         Ok(())
     } else {
         Err(invalid(format!(
-            "unsupported or malformed standards mapping `{}` `{}` `{}`",
+            "unsupported or malformed standards mapping `{}` `{}` `{}`; use ASVS 5.0.0 V<digits>.<digits>.<digits>, WSTG 4.2 WSTG-v42-<uppercase-code>, CWE 4.18 CWE-<digits>, or PERITUS 1 peritus:<lowercase-custom-id>",
             value.catalog, value.version, value.identifier
         )))
     }
 }
 
-fn validate_compatibility(
+fn is_compatible(
     method: &MethodRecord,
     surface: &ApplicationSurfaceRecord,
     property: &SecurityPropertyRecord,
-) -> Result<(), Error> {
+) -> bool {
     if method.name != CANARY_METHOD {
-        return Ok(());
+        return true;
     }
     if !matches!(surface.kind, SurfaceKind::CommandLine | SurfaceKind::Native) {
-        return Err(invalid(format!(
-            "method `{CANARY_METHOD}` cannot be assigned to non-command surface `{}`",
-            surface.name
-        )));
+        return false;
     }
-    let disclosure = property.standards.iter().any(|reference| {
+    property.standards.iter().any(|reference| {
         (reference.catalog == "ASVS"
             && reference.version == "5.0.0"
             && reference.identifier == "V14.2.6")
             || (reference.catalog == "CWE"
                 && reference.version == "4.18"
                 && reference.identifier == "CWE-200")
-    });
-    if !disclosure {
-        return Err(invalid(format!(
-            "method `{CANARY_METHOD}` is only compatible with an ASVS 5.0.0 V14.2.6 or CWE 4.18 CWE-200 disclosure property"
-        )));
-    }
-    Ok(())
+    })
 }
 
 fn rebuild_legacy_coverage(state: &mut State) {

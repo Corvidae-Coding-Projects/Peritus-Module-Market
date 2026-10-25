@@ -198,6 +198,15 @@ compatible Linux command/native disclosure properties and the Phase 12 source-on
 `gap.no-compatible-runtime.v1`. The compiler rejects inventory prose that calls work “examined”;
 only an admitted host receipt can make that transition.
 
+The generic process laboratory is not a substitute for a class-specific protocol driver. An
+executable hypothesis is accepted there only when it targets a compatible nondisclosure property
+and delivers the private `{{PERITUS_CANARY}}` through an exact argument, stdin, or non-secret
+environment value. The report retains environment names and value digests, not raw values. A
+hypothesis that needs an HTTP exchange, provisioned identity, file mutation, multi-step protocol,
+or concurrent schedule remains explicitly analysis-only unless the selected source yields a
+compatible class-adapter contract. Merely starting the target can never count as testing the
+described attack.
+
 ## Deterministic source analysis
 
 Phase 12 adds a registered module analyzer that reads only the immutable snapshot created by `scope`:
@@ -568,11 +577,14 @@ does not apply the patch to the selected project. Use `graph-probe-single-lab` a
 `graph-probe-small-budget` to exercise host rejection. Use `lab-select PREFIX` before stop and
 teardown when cleaning up each retained twin.
 
-## Run the complete supported campaign
+## Run the source-bound application campaign
 
-Phase 20 adds one durable operator journey across every currently registered adapter. It is the
-easiest way to exercise the supported profiles without manually remembering adapter installation,
-laboratory order, twin selection, cleanup, or export commands:
+Phase 20 adds one durable operator journey for any selected source tree. It runs the source analyzer,
+copies and launches a discovered real application entry point, records copied-tree effects, and
+cleans up before marking the journey complete. It also puts every registered class-specific adapter into the campaign
+ledger. Adapters that cannot be bound to an independently derived compatible application contract
+are pre-accounted as explicit skipped gaps instead of being silently omitted or run against a bundled
+fixture:
 
 ```text
 /module peritus.red-team scope
@@ -581,10 +593,10 @@ laboratory order, twin selection, cleanup, or export commands:
 /module peritus.red-team campaign-next
 ```
 
-`campaign-plan` shows the fixed plan before any effect. `campaign-start` binds that plan to the
-current immutable source snapshot. Each `campaign-next` dispatches at most one module-owned operation;
-invoke it again only after the preceding operation settles. The TUI and browser UI expose the same
-controls and retained progress.
+`campaign-plan` shows the fixed plan before any effect, including the named adapter-accounting steps.
+`campaign-start` binds that plan to the current immutable source snapshot. Each `campaign-next`
+dispatches at most one module-owned operation; invoke it again only after the preceding operation
+settles. The TUI and browser UI expose the same controls and retained progress.
 
 Use `campaign-pause` between operations and `campaign-resume` to continue after a pause, client
 disconnect, daemon restart, or machine restart. `campaign-steer TEXT` records operator guidance for
@@ -596,9 +608,11 @@ than counting it as complete. Use `campaign-retry` after correcting a prerequisi
 `campaign-abort` converts every still-live laboratory into a one-at-a-time cleanup plan. Continue
 until each one has a module-authored torn-down receipt. `campaign` shows every planned, waiting,
 completed, skipped, or blocked step plus retained steering and failures. Partial reports remain
-available throughout. Completion exports Markdown, JSON, SARIF 2.1.0, exact patch artifacts, and a
-replay bundle. It means the registered profiles completed or were explicitly recorded as gaps; it
-does not mean every vulnerability class or target technology was tested.
+available throughout. After completion, use `report`, `report-json`, `sarif`, and `bundle` to export
+Markdown, JSON, SARIF 2.1.0, exact patch artifacts, and a replay bundle from the same terminal
+campaign state. Completion means the source-bound steps finished and every registered adapter family
+was either exercised by separately retained compatible receipts or named as a gap. It does not mean
+every vulnerability class or target technology was tested.
 
 ## Read the results correctly
 
@@ -651,7 +665,7 @@ is a separate user-controlled action.
 
 | Command | Purpose |
 | --- | --- |
-| `campaign-plan` / `campaign-start` | Preview and bind the complete supported-profile journey to the current source snapshot. |
+| `campaign-plan` / `campaign-start` | Preview and bind the source-bound journey and explicit adapter-gap ledger to the current source snapshot. |
 | `campaign` / `campaign-next` | Inspect durable step-by-step progress or dispatch the next single bounded host operation. |
 | `campaign-pause` / `campaign-resume` | Pause between operations or continue the exact retained journey after reconnect/restart. |
 | `campaign-steer TEXT` | Retain visible operator guidance without enlarging authority or rewriting the fixed plan. |

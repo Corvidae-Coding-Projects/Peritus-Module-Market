@@ -14,12 +14,16 @@ use crate::{
 use peritus_plugin_sdk::{
     HOST_CAPABILITY_SCOPED_SOURCE, ModuleAction, ModuleAgentRequest, ModuleCyberAccessProgram,
     ModuleFunction, ModuleHostProfile, ModuleHostRequest, ModuleJobLimits, ModuleJobPhase,
-    ModuleJobRequest, ModuleJobStatus, ModuleJobVerdict, ModuleMenuAction,
+    ModuleJobReceipt, ModuleJobRequest, ModuleJobStatus, ModuleJobVerdict, ModuleLaboratoryPhase,
+    ModuleLaboratoryProcessInput, ModuleLaboratoryReceipt, ModuleMenuAction,
     ScopedSourceManifestRequest, ScopedSourceReadRequest,
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
-use std::{collections::BTreeSet, fs};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fs,
+};
 
 const SKILL: &str = include_str!("../skills/red-team/SKILL.md");
 const EVIDENCE_STATES: &str = include_str!("../skills/red-team/references/evidence-states.md");
@@ -38,7 +42,16 @@ struct HypothesisInput {
     security_property: String,
     falsifiable_observation: String,
     source_evidence: Vec<String>,
+    #[serde(default)]
+    runtime: Option<String>,
     target_path: Option<String>,
+    #[serde(default)]
+    arguments: Vec<String>,
+    #[serde(default)]
+    stdin: Option<String>,
+    #[serde(default)]
+    environment: BTreeMap<String, String>,
+    #[serde(default)]
     attacker_input: Option<String>,
     changed_dimension: String,
 }
@@ -230,12 +243,12 @@ fn model(state: &State, role: &str) -> Result<ModuleAction, Error> {
         "inventory" => (
             "writer",
             "Red Team · bounded inventory",
-            "Perform exactly one bounded inventory and threat-boundary pass. Start with red_team_inspect(kind=inventory) once. When more than one small source page is needed, make one red_team_observe_many call instead of separate observations; its host reads complete before your next turn. Request only pages needed to identify concrete profiles, components, surfaces, identities/configurations, properties and boundaries. After requested source pages are delivered in coordinator feedback, treat them as retained: do not inspect or request those unchanged ranges again in this role. Route all supported families into exact surface × identity/configuration × property × method obligations. Inventory prose cannot mark anything examined. Use `gap.no-compatible-runtime.v1` for honest unsupported cells. Finish promptly with red_team_inventory_commit.",
+            "Perform exactly one bounded inventory and threat-boundary pass. Start with red_team_inspect(kind=inventory) once. When more than one small source page is needed, make one red_team_observe_many call instead of separate observations; its host reads complete before your next turn. Request only pages needed to identify concrete profiles, components, surfaces, identities/configurations, properties and boundaries. After requested source pages are delivered in coordinator feedback, treat them as retained: do not inspect or request those unchanged ranges again in this role. For every target profile, route every supported family exactly once into profile-local surface × identity/configuration × property × method obligations; never mix names from different profiles in one route. Inventory prose cannot mark anything examined. Use `gap.no-compatible-runtime.v1` for honest unsupported cells. Finish promptly with red_team_inventory_commit.",
         ),
         "discovery" => (
             "writer",
             "Red Team · hypothesis discovery",
-            "Inspect the committed inventory and retained hypothesis index exactly once, then commit missing small falsifiable hypotheses with red_team_discovery_commit in batches of at most six. Set complete=false while another batch remains and complete=true on the final batch. Every accepted batch ends the provider request and is durable before the next fresh turn, so on recovery add only missing work. The inventory view is already compact and authoritative; do not request coverage or source again unless one specific missing fact is necessary. Do not rediscover the repository or reread an unchanged range within this role. Distinguish known-description reproduction from unknown discovery. Every executable probe must name an immutable target path, literal attacker input, and changed dimension. `attacker_input` is exactly one opaque second argument passed to the target; the host supplies the hidden canary path as the first argument. Never encode argv, JSON, a shell command, or the host canary path in `attacker_input`. Prefer the transactional batch commit over one-at-a-time registration.",
+            "Inspect the committed inventory and retained hypothesis index exactly once, then commit missing small falsifiable hypotheses with red_team_discovery_commit in batches of at most six. Set complete=false while another batch remains and complete=true on the final batch. Every accepted batch ends the provider request and is durable before the next fresh turn, so on recovery add only missing work. The inventory view is already compact and authoritative; do not request coverage or source again unless one specific missing fact is necessary. Do not rediscover the repository or reread an unchanged range within this role. Distinguish known-description reproduction from unknown discovery. The generic disposable-process method proves only canary nondisclosure on a command-line or native surface mapped to ASVS 5.0.0 V14.2.6 or CWE 4.18 CWE-200. For that method, name the runtime, immutable source-manifest entry point, exact literal argv vector, optional stdin, exact non-secret environment, and changed dimension; place `{{PERITUS_CANARY}}` in at least one delivered argv, stdin, or environment value. For every hypothesis requiring an HTTP client/server exchange, identity provisioning, protocol choreography, concurrency, filesystem mutation, or any oracle other than canary nondisclosure, set runtime and target_path to null and leave argv, stdin, and environment empty: it is analysis-only until a compatible class adapter exists. Use runtime `direct` for a checked-in executable, `cargo` with Cargo.toml for Rust, or the corresponding declared interpreter/runtime. Derive argv from the observed application interface; do not prepend a source path or collapse multiple arguments into one string. Never encode a shell command, credential, connection string, or host path. Prefer the transactional batch commit over one-at-a-time registration.",
         ),
         "skeptic" => (
             "reviewer",
@@ -276,12 +289,12 @@ fn model(state: &State, role: &str) -> Result<ModuleAction, Error> {
             ),
             cyber_access_program: Some(ModuleCyberAccessProgram::DaybreakBlue),
             tools: vec![],
-            functions: functions(role),
+            functions: functions(state, role),
         },
     })
 }
 
-fn functions(role: &str) -> Vec<ModuleFunction> {
+fn functions(state: &State, role: &str) -> Vec<ModuleFunction> {
     let mut values = vec![function(
         "red_team_inspect",
         "Read bounded retained campaign data. kind is inventory, source, hypotheses, evidence, or coverage. Evidence may be narrowed to one hypothesis_id. This never reads ambient files.",
@@ -310,12 +323,12 @@ fn functions(role: &str) -> Vec<ModuleFunction> {
             function(
                 "red_team_discovery_commit",
                 "Atomically register at most six missing falsifiable hypotheses. Existing identical hypotheses are reused. Set complete=false if another batch remains, or complete=true to finish discovery and schedule probes. The whole batch either validates or leaves durable state unchanged, and every accepted batch ends this provider request.",
-                json!({"type":"object","additionalProperties":false,"properties":{"hypotheses":{"type":"array","minItems":1,"maxItems":6,"items":hypothesis_schema()},"complete":{"type":"boolean"}} ,"required":["hypotheses","complete"]}),
+                json!({"type":"object","additionalProperties":false,"properties":{"hypotheses":{"type":"array","minItems":1,"maxItems":6,"items":hypothesis_schema(state)},"complete":{"type":"boolean"}} ,"required":["hypotheses","complete"]}),
             ),
             function(
                 "red_team_hypothesis_register",
                 "Compatibility path for registering one falsifiable hypothesis before execution. Prefer red_team_discovery_commit. A null target_path records analysis-only or blocked work; it cannot become runtime-confirmed.",
-                hypothesis_schema(),
+                hypothesis_schema(state),
             ),
             function(
                 "red_team_discovery_complete",
@@ -349,8 +362,24 @@ fn function(name: &str, description: &str, schema: Value) -> ModuleFunction {
     ModuleFunction { name: name.into(), description: description.into(), schema }
 }
 
-fn hypothesis_schema() -> Value {
-    json!({"type":"object","additionalProperties":false,"properties":{"family":{"type":"string","minLength":1,"maxLength":128},"origin":{"type":"string","enum":["known_description","unknown_discovery"]},"attacker":{"type":"string","minLength":1,"maxLength":4096},"entry_point":{"type":"string","minLength":1,"maxLength":4096},"prerequisites":{"type":"array","maxItems":64,"items":{"type":"string","minLength":1,"maxLength":4096}},"security_property":{"type":"string","minLength":1,"maxLength":4096},"falsifiable_observation":{"type":"string","minLength":1,"maxLength":4096},"source_evidence":{"type":"array","minItems":1,"maxItems":128,"items":{"type":"string","minLength":1,"maxLength":128}},"target_path":{"type":["string","null"],"maxLength":4096},"attacker_input":{"type":["string","null"],"maxLength":16384,"description":"Exact single opaque second argument for the target, for example read. The host separately provides the hidden canary path as argv[1]. Never encode argv, JSON, shell syntax, or a host path here."},"changed_dimension":{"type":"string","minLength":1,"maxLength":4096}},"required":["family","origin","attacker","entry_point","prerequisites","security_property","falsifiable_observation","source_evidence","target_path","attacker_input","changed_dimension"]})
+fn hypothesis_schema(state: &State) -> Value {
+    let entry_points = state
+        .application_surfaces
+        .iter()
+        .flat_map(|surface| [surface.name.clone(), surface.entry_point.clone()])
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+    let security_properties = state
+        .security_properties
+        .iter()
+        .map(|property| property.id.value.clone())
+        .collect::<Vec<_>>();
+    let evidence = state
+        .current_observations()
+        .map(|observation| observation.record.id.value.clone())
+        .collect::<Vec<_>>();
+    json!({"type":"object","additionalProperties":false,"properties":{"family":{"type":"string","enum":security_families()},"origin":{"type":"string","enum":["known_description","unknown_discovery"]},"attacker":{"type":"string","minLength":1,"maxLength":4096},"entry_point":{"type":"string","enum":entry_points,"description":"Exact compiled surface name or exact entry_point from the committed inventory."},"prerequisites":{"type":"array","maxItems":64,"items":{"type":"string","minLength":1,"maxLength":4096}},"security_property":{"type":"string","enum":security_properties,"description":"Exact compiled security-property identifier whose family matches this hypothesis."},"falsifiable_observation":{"type":"string","minLength":1,"maxLength":4096},"source_evidence":{"type":"array","minItems":1,"maxItems":128,"items":{"type":"string","enum":evidence,"description":"Exact current evidence_id returned by inventory or a source-observation handoff."}},"runtime":{"enum":[null,"direct","python3","node","bash","ruby","php","perl","cargo","go","java","dotnet","make"],"description":"Generic canary-nondisclosure runtime. Use null with null target_path for every hypothesis that needs another runtime adapter."},"target_path":{"type":["string","null"],"maxLength":4096,"description":"Exact source-manifest entry point for a canary-nondisclosure process, or null for analysis-only work. Never name a generated build output."},"arguments":{"type":"array","maxItems":64,"description":"Exact literal application argv after the runtime launcher. Do not include the runtime, manifest, or shell syntax. Executable plans must deliver {{PERITUS_CANARY}} in argv, stdin, or environment.","items":{"type":"string","maxLength":16384}},"stdin":{"type":["string","null"],"maxLength":65536,"description":"Exact stdin bytes as UTF-8 text, or null. Executable plans must deliver {{PERITUS_CANARY}} in argv, stdin, or environment."},"environment":{"type":"object","maxProperties":64,"propertyNames":{"pattern":"^[A-Za-z_][A-Za-z0-9_]{0,127}$"},"additionalProperties":{"type":"string","maxLength":65536},"description":"Exact non-secret environment values for the disposable process. Executable plans must deliver {{PERITUS_CANARY}} in argv, stdin, or environment; never include credentials or connection strings."},"changed_dimension":{"type":"string","minLength":1,"maxLength":4096}},"required":["family","origin","attacker","entry_point","prerequisites","security_property","falsifiable_observation","source_evidence","runtime","target_path","arguments","stdin","environment","changed_dimension"]})
 }
 
 fn inventory_schema() -> Value {
@@ -383,15 +412,15 @@ fn inventory_schema() -> Value {
                 "privileges":{"type":"array","maxItems":128,"items":{"type":"string","minLength":1,"maxLength":4096}},"configuration":strings()
             },"required":["name","profile","attacker","privileges","configuration"]}},
             "properties":{"type":"array","minItems":1,"maxItems":512,"items":{"type":"object","additionalProperties":false,"properties":{
-                "id":{"type":"string","pattern":"^[a-z0-9_.:-]+$","maxLength":160},"family":{"type":"string","minLength":1,"maxLength":128},"statement":{"type":"string","minLength":1,"maxLength":4096},
-                "standards":{"type":"array","minItems":1,"maxItems":16,"items":{"type":"object","additionalProperties":false,"properties":{
-                    "catalog":{"type":"string","enum":["ASVS","WSTG","CWE","PERITUS"]},"version":{"type":"string","minLength":1,"maxLength":32},"identifier":{"type":"string","minLength":1,"maxLength":128}
+                "id":{"type":"string","pattern":"^[a-z0-9_.:-]+$","maxLength":160},"family":{"type":"string","enum":security_families()},"statement":{"type":"string","minLength":1,"maxLength":4096},
+                "standards":{"type":"array","minItems":1,"maxItems":16,"description":"Use only these exact catalog/version/identifier forms: ASVS 5.0.0 with V<digit>.<digit>.<digit>; WSTG 4.2 with WSTG-v42-<uppercase-code>; CWE 4.18 with CWE-<digits>; or PERITUS 1 with a lowercase custom identifier beginning peritus:. Do not invent a project-specific catalog or omit the peritus: prefix.","items":{"type":"object","additionalProperties":false,"properties":{
+                    "catalog":{"type":"string","enum":["ASVS","WSTG","CWE","PERITUS"]},"version":{"type":"string","enum":["5.0.0","4.2","4.18","1"]},"identifier":{"type":"string","pattern":"^(V[0-9]+\\.[0-9]+\\.[0-9]+|WSTG-v42-[A-Z0-9-]+|CWE-[0-9]+|peritus:[a-z0-9_.-]+)$","maxLength":128,"description":"The identifier must match its catalog and version. Examples: ASVS/5.0.0/V5.3.2, WSTG/4.2/WSTG-v42-INPV-01, CWE/4.18/CWE-22, PERITUS/1/peritus:file-publish-001."}
                 },"required":["catalog","version","identifier"]}}
             },"required":["id","family","statement","standards"]}},
-            "routes":{"type":"array","minItems":15,"maxItems":15,"items":{"type":"object","additionalProperties":false,"properties":{
-                "family":{"type":"string","minLength":1,"maxLength":128},"state":{"type":"string","enum":["unexamined","not_applicable","blocked"]},"reason":{"type":"string","minLength":1,"maxLength":4096},
-                "surfaces":strings(),"identities":strings(),"properties":strings(),"methods":{"type":"array","minItems":1,"maxItems":3,"items":{"type":"string","enum":["analysis.scoped-source-review.v1","runtime.linux-canary-disclosure.v1","gap.no-compatible-runtime.v1"]}}
-            },"required":["family","state","reason","surfaces","identities","properties","methods"]}},
+            "routes":{"type":"array","minItems":15,"maxItems":480,"description":"Provide exactly one route for every target-profile and security-family pair. Every named surface and identity in a route must belong to that route's profile.","items":{"type":"object","additionalProperties":false,"properties":{
+                "profile":{"type":"string","minLength":1,"maxLength":256,"description":"Exact name of one object from profiles. All surfaces and identities in this route must belong to this profile."},"family":{"type":"string","enum":security_families()},"state":{"type":"string","enum":["unexamined","not_applicable","blocked"]},"reason":{"type":"string","minLength":1,"maxLength":4096},
+                "surfaces":strings(),"identities":strings(),"properties":strings(),"methods":{"type":"array","minItems":1,"maxItems":3,"description":"Methods available to this profile/family route. The compiler creates cells only for compatible surface/property pairs. runtime.linux-canary-disclosure.v1 therefore may coexist with non-command surfaces, but the same route must include at least one command_line/native surface and one ASVS 5.0.0 V14.2.6 or CWE 4.18 CWE-200 property.","items":{"type":"string","enum":["analysis.scoped-source-review.v1","runtime.linux-canary-disclosure.v1","gap.no-compatible-runtime.v1"]}}
+            },"required":["profile","family","state","reason","surfaces","identities","properties","methods"]}},
             "source_evidence":{"type":"array","minItems":1,"maxItems":512,"items":{"type":"string","minLength":1,"maxLength":128}}
         },
         "required":["profiles","components","surfaces","threat_boundaries","identities","properties","routes","source_evidence"]
@@ -602,12 +631,32 @@ fn evidence_bundle(state: &State, hypothesis_id: &str) -> Result<Value, Error> {
         .collect::<Vec<_>>();
     let job_ids =
         probes.iter().filter_map(|probe| probe.host_job_id.as_deref()).collect::<BTreeSet<_>>();
+    let receipts = state
+        .job_receipts
+        .iter()
+        .filter(|receipt| job_ids.contains(receipt.job_id.as_str()))
+        .collect::<Vec<_>>();
+    let request_digests =
+        receipts.iter().map(|receipt| receipt.request_digest.as_str()).collect::<BTreeSet<_>>();
+    let expected_canary = plan.and_then(|plan| {
+        let injected = plan.arguments.iter().any(|value| value.contains("{{PERITUS_CANARY}}"))
+            || plan.stdin.as_deref().is_some_and(|value| value.contains("{{PERITUS_CANARY}}"));
+        state.active_snapshot().filter(|_| injected).map(|snapshot| {
+            format!(
+                "peritus-red-team-canary-{}",
+                &digest(format!("{}\0{}", plan.hypothesis_id, snapshot.snapshot_digest).as_bytes())
+                    [..24]
+            )
+        })
+    });
     Ok(json!({
         "hypothesis":state.hypotheses.iter().find(|record|record.id.value==hypothesis_id),
         "plan":plan,
         "source":state.current_observations().filter(|observation|source_ids.contains(observation.record.id.value.as_str())).map(observation_summary).collect::<Vec<_>>(),
         "probes":probes,
-        "receipts":state.job_receipts.iter().filter(|receipt|job_ids.contains(receipt.job_id.as_str())).collect::<Vec<_>>(),
+        "receipts":receipts,
+        "expected_canary":expected_canary,
+        "laboratory_observations":state.laboratory_receipts.iter().filter(|receipt|request_digests.contains(receipt.request_digest.as_str())).map(laboratory_observation_summary).collect::<Vec<_>>(),
         "finding":state.findings.iter().find(|finding|finding.hypothesis_id==hypothesis_id),
         "reviews":state.reviews.iter().filter(|review|state.findings.iter().any(|finding|finding.hypothesis_id==hypothesis_id && review.subject==finding.id)).collect::<Vec<_>>(),
     }))
@@ -623,6 +672,39 @@ fn observation_summary(observation: &crate::state::SourceObservation) -> Value {
         "range_end":observation.range_end,
         "artifact_digest":observation.record.artifact_digest,
         "reuse_count":observation.reuse_count,
+    })
+}
+
+fn laboratory_observation_summary(receipt: &peritus_plugin_sdk::ModuleLaboratoryReceipt) -> Value {
+    const MAX_REVIEW_STREAM_CHARS: usize = 16 * 1024;
+    let stream = |key: &str| {
+        let value = receipt.observation[key].as_str().unwrap_or_default();
+        let characters = value.chars().count();
+        json!({
+            "text":value.chars().take(MAX_REVIEW_STREAM_CHARS).collect::<String>(),
+            "characters":characters,
+            "truncated":characters > MAX_REVIEW_STREAM_CHARS,
+        })
+    };
+    json!({
+        "operation":receipt.operation,
+        "request_digest":receipt.request_digest,
+        "source_snapshot":receipt.source_snapshot,
+        "isolation_backend":receipt.isolation_backend,
+        "network_policy":receipt.network_policy,
+        "process_cleanup_complete":receipt.process_cleanup_complete,
+        "runtime":receipt.observation["runtime"],
+        "entrypoint":receipt.observation["entrypoint"],
+        "arguments":receipt.observation["arguments"],
+        "stdin_bytes":receipt.observation["stdin_bytes"],
+        "effective_limits":receipt.observation["effective_limits"],
+        "terminal_disposition":receipt.observation["terminal_disposition"],
+        "exit_code":receipt.observation["exit_code"],
+        "stdout":stream("stdout"),
+        "stderr":stream("stderr"),
+        "stdout_digest":receipt.observation["stdout_digest"],
+        "stderr_digest":receipt.observation["stderr_digest"],
+        "oracle_matched":receipt.observation["oracle_matched"],
     })
 }
 
@@ -766,9 +848,34 @@ fn register_hypothesis(state: &mut State, arguments: &Value) -> Result<Value, Er
             surface.name == input.entry_point || surface.entry_point == input.entry_point
         })
     {
-        return Err(invalid(
-            "hypothesis entry_point must name a compiled surface name or exact entry point",
-        ));
+        let allowed = state
+            .application_surfaces
+            .iter()
+            .flat_map(|surface| [surface.name.as_str(), surface.entry_point.as_str()])
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .take(64)
+            .collect::<Vec<_>>()
+            .join(", ");
+        return Err(invalid(format!(
+            "hypothesis entry_point must name a compiled surface name or exact entry point; allowed values: {allowed}"
+        )));
+    }
+    let property = state
+        .security_properties
+        .iter()
+        .find(|property| property.id.value == input.security_property)
+        .ok_or_else(|| {
+            invalid(format!(
+                "hypothesis security_property `{}` is not a compiled security-property identifier",
+                input.security_property
+            ))
+        })?;
+    if property.family != input.family {
+        return Err(invalid(format!(
+            "hypothesis security_property `{}` belongs to family `{}` rather than `{}`",
+            input.security_property, property.family, input.family
+        )));
     }
     for value in [
         &input.attacker,
@@ -785,24 +892,112 @@ fn register_hypothesis(state: &mut State, arguments: &Value) -> Result<Value, Er
     if evidence.is_empty() {
         return Err(invalid("hypothesis requires exact retained source evidence"));
     }
-    if input.target_path.is_some() != input.attacker_input.is_some() {
-        return Err(invalid("target_path and attacker_input must both be present or both be null"));
+    if input.target_path.is_some() != input.runtime.is_some() {
+        return Err(invalid("runtime and target_path must both be present or both be null"));
+    }
+    if input.target_path.is_none()
+        && (!input.arguments.is_empty()
+            || input.stdin.is_some()
+            || !input.environment.is_empty()
+            || input.attacker_input.is_some())
+    {
+        return Err(invalid(
+            "analysis-only hypotheses cannot carry argv, stdin, environment, or legacy attacker input",
+        ));
+    }
+    if let Some(runtime) = &input.runtime
+        && !matches!(
+            runtime.as_str(),
+            "direct"
+                | "python3"
+                | "node"
+                | "bash"
+                | "ruby"
+                | "php"
+                | "perl"
+                | "cargo"
+                | "go"
+                | "java"
+                | "dotnet"
+                | "make"
+        )
+    {
+        return Err(invalid("hypothesis names an unsupported generic source runtime"));
+    }
+    if input.arguments.len() > 64
+        || input.arguments.iter().any(|value| value.len() > 16 * 1024 || value.contains('\0'))
+        || input.stdin.as_ref().is_some_and(|value| value.len() > 64 * 1024 || value.contains('\0'))
+        || input.environment.len() > 64
+        || input.environment.iter().any(|(name, value)| {
+            let upper = name.to_ascii_uppercase();
+            name.is_empty()
+                || name.len() > 128
+                || !name.bytes().enumerate().all(|(index, byte)| {
+                    byte == b'_'
+                        || byte.is_ascii_alphanumeric() && (index > 0 || !byte.is_ascii_digit())
+                })
+                || value.len() > 64 * 1024
+                || value.contains('\0')
+                || ["TOKEN", "PASSWORD", "SECRET", "CREDENTIAL", "API_KEY", "AUTH"]
+                    .iter()
+                    .any(|marker| upper.contains(marker))
+        })
+    {
+        return Err(invalid(
+            "hypothesis argv, stdin, or non-secret environment exceeds the bounded literal-input limits",
+        ));
+    }
+    if input.arguments.iter().any(|value| {
+        let normalized = value.trim().to_ascii_lowercase();
+        normalized.starts_with("argv:")
+            || normalized.starts_with("argv=")
+            || value.contains("/tmp/peritus-owned/")
+    }) {
+        return Err(invalid(
+            "arguments must be exact literal argv elements; do not encode argv or name a host path",
+        ));
     }
     if let Some(value) = &input.attacker_input {
+        if !input.arguments.is_empty() || input.stdin.is_some() || !input.environment.is_empty() {
+            return Err(invalid(
+                "legacy attacker_input cannot be combined with argv, stdin, or environment templates",
+            ));
+        }
         let normalized = value.trim().to_ascii_lowercase();
         if normalized.starts_with("argv:")
             || normalized.starts_with("argv=")
             || value.contains("/tmp/peritus-owned/")
         {
             return Err(invalid(
-                "attacker_input must be the exact single literal passed after the module-owned canary path; do not encode argv or name the canary path",
+                "legacy attacker_input must be one exact literal argument; do not encode argv or name a host path",
             ));
         }
     }
     if let Some(path) = &input.target_path
         && !state.investigation.manifest_entries.iter().any(|entry| entry.path == *path)
     {
-        return Err(invalid("probe target is not in the captured source manifest"));
+        return Err(invalid(format!(
+            "probe target `{path}` is not an exact file in the captured source manifest; use a manifest path already returned by red_team_inspect(kind=inventory)"
+        )));
+    }
+    if input.target_path.is_some() {
+        let canary_delivered =
+            input.arguments.iter().any(|value| value.contains("{{PERITUS_CANARY}}"))
+                || input.stdin.as_deref().is_some_and(|value| value.contains("{{PERITUS_CANARY}}"))
+                || input.environment.values().any(|value| value.contains("{{PERITUS_CANARY}}"));
+        let canary_property = property.standards.iter().any(|reference| {
+            (reference.catalog == "ASVS"
+                && reference.version == "5.0.0"
+                && reference.identifier == "V14.2.6")
+                || (reference.catalog == "CWE"
+                    && reference.version == "4.18"
+                    && reference.identifier == "CWE-200")
+        });
+        if !canary_delivered || !canary_property {
+            return Err(invalid(
+                "generic executable probes are limited to canary nondisclosure: map the property to ASVS 5.0.0 V14.2.6 or CWE 4.18 CWE-200 and deliver {{PERITUS_CANARY}} in argv, stdin, or environment; otherwise record an analysis-only hypothesis with null runtime and target_path",
+            ));
+        }
     }
     let origin = match input.origin.as_str() {
         "known_description" => HypothesisOrigin::KnownDescription,
@@ -813,7 +1008,11 @@ fn register_hypothesis(state: &mut State, arguments: &Value) -> Result<Value, Er
         plan.family == input.family
             && plan.origin == origin
             && plan.source_evidence == evidence
+            && plan.runtime == input.runtime
             && plan.target_path == input.target_path
+            && plan.arguments == input.arguments
+            && plan.stdin == input.stdin
+            && plan.environment == input.environment
             && plan.attacker_input == input.attacker_input
             && plan.changed_dimension == input.changed_dimension
             && state.hypotheses.iter().any(|hypothesis| {
@@ -861,7 +1060,11 @@ fn register_hypothesis(state: &mut State, arguments: &Value) -> Result<Value, Er
         family: input.family,
         origin,
         source_evidence: evidence,
+        runtime: input.runtime,
         target_path: input.target_path,
+        arguments: input.arguments,
+        stdin: input.stdin,
+        environment: input.environment,
         attacker_input: input.attacker_input,
         changed_dimension: input.changed_dimension,
     });
@@ -915,6 +1118,36 @@ fn discovery_complete(state: &mut State) -> Result<Value, Error> {
     Ok(json!({"saved":true,"request_complete":true,"next_stage":"probing"}))
 }
 
+fn plan_delivers_canary(plan: &HypothesisPlan) -> bool {
+    plan.arguments.iter().any(|value| value.contains("{{PERITUS_CANARY}}"))
+        || plan.stdin.as_deref().is_some_and(|value| value.contains("{{PERITUS_CANARY}}"))
+        || plan.environment.values().any(|value| value.contains("{{PERITUS_CANARY}}"))
+        || plan.attacker_input.as_deref().is_some_and(|value| value.contains("{{PERITUS_CANARY}}"))
+}
+
+fn plan_targets_canary_property(state: &State, plan: &HypothesisPlan) -> bool {
+    let Some(property_id) = state
+        .hypotheses
+        .iter()
+        .find(|hypothesis| hypothesis.id.value == plan.hypothesis_id)
+        .map(|hypothesis| hypothesis.security_property.as_str())
+    else {
+        return false;
+    };
+    state.security_properties.iter().find(|property| property.id.value == property_id).is_some_and(
+        |property| {
+            property.standards.iter().any(|reference| {
+                (reference.catalog == "ASVS"
+                    && reference.version == "5.0.0"
+                    && reference.identifier == "V14.2.6")
+                    || (reference.catalog == "CWE"
+                        && reference.version == "4.18"
+                        && reference.identifier == "CWE-200")
+            })
+        },
+    )
+}
+
 fn schedule_probe(
     parameters: &Value,
     profile: &Option<ModuleHostProfile>,
@@ -925,32 +1158,107 @@ fn schedule_probe(
     }
     let next_plan = state.investigation.hypothesis_plans.iter().find(|plan| {
         plan.target_path.is_some()
-            && !state
-                .investigation
-                .probes
-                .iter()
-                .any(|probe| probe.hypothesis_id == plan.hypothesis_id)
+            && !state.investigation.probes.iter().any(|probe| {
+                probe.hypothesis_id == plan.hypothesis_id
+                    && matches!(probe.state, ProbeState::Completed | ProbeState::Blocked)
+            })
     });
     let Some(plan) = next_plan.cloned() else {
-        state.investigation.stage = InvestigationStage::Skeptic;
-        state.investigation.feedback = "All scheduled proof cases reached a retained terminal or blocked state. Review raw receipts independently; do not inherit discovery conclusions.".into();
-        state.investigation.round = state.investigation.round.saturating_add(1);
-        crate::state::save(parameters, state)?;
-        return next(parameters, profile, state);
+        if let Some(status) = investigation_laboratory(state) {
+            let laboratory_id = status.handle.laboratory_id.clone();
+            return match status.phase {
+                ModuleLaboratoryPhase::Ready => crate::laboratory::investigation_lifecycle(
+                    parameters,
+                    state,
+                    &laboratory_id,
+                    "stop",
+                ),
+                ModuleLaboratoryPhase::Created
+                | ModuleLaboratoryPhase::Prepared
+                | ModuleLaboratoryPhase::Stopped
+                | ModuleLaboratoryPhase::Failed
+                | ModuleLaboratoryPhase::Quarantined => crate::laboratory::investigation_lifecycle(
+                    parameters,
+                    state,
+                    &laboratory_id,
+                    "teardown",
+                ),
+                ModuleLaboratoryPhase::TornDown => finish_probing(parameters, profile, state),
+            };
+        }
+        return finish_probing(parameters, profile, state);
     };
+    let target_path = plan.target_path.clone().expect("filtered target");
+    let arguments = if plan.arguments.is_empty() {
+        plan.attacker_input.clone().into_iter().collect::<Vec<_>>()
+    } else {
+        plan.arguments.clone()
+    };
+    let attempt_index = state
+        .investigation
+        .probes
+        .iter()
+        .position(|probe| probe.hypothesis_id == plan.hypothesis_id)
+        .unwrap_or_else(|| {
+            let attempt_number = state.investigation.probes.len() + 1;
+            state.investigation.probes.push(ProbeAttempt {
+                id: format!("probe-{attempt_number}"),
+                hypothesis_id: plan.hypothesis_id.clone(),
+                target_path: target_path.clone(),
+                arguments: arguments.clone(),
+                stdin_digest: plan.stdin.as_ref().map(|value| digest(value.as_bytes())),
+                environment_digests: plan
+                    .environment
+                    .iter()
+                    .map(|(name, value)| (name.clone(), digest(value.as_bytes())))
+                    .collect(),
+                attacker_input: arguments.join(" "),
+                changed_dimension: plan.changed_dimension.clone(),
+                state: ProbeState::Planned,
+                host_job_id: None,
+                evidence: None,
+                detail: "registered before host execution".into(),
+            });
+            state.investigation.probes.len() - 1
+        });
+    if !plan_delivers_canary(&plan) || !plan_targets_canary_property(state, &plan) {
+        let probe = &mut state.investigation.probes[attempt_index];
+        probe.state = ProbeState::Blocked;
+        probe.detail = "retained executable plan does not encode a canary-nondisclosure mutation compatible with the generic process method; a class-specific adapter is required"
+            .into();
+        state.investigation.feedback = format!(
+            "Hypothesis `{}` was retained as blocked instead of being misrepresented as runtime evidence: its claimed mutation requires a class-specific adapter.",
+            plan.hypothesis_id
+        );
+        crate::state::save(parameters, state)?;
+        return schedule_probe(parameters, profile, state);
+    }
+    if let Some(hypothesis) =
+        state.hypotheses.iter_mut().find(|hypothesis| hypothesis.id.value == plan.hypothesis_id)
+    {
+        hypothesis.state = HypothesisState::Investigating;
+    }
+    if plan.runtime.is_some() {
+        return schedule_laboratory_probe(
+            parameters,
+            profile,
+            state,
+            attempt_index,
+            &plan,
+            &target_path,
+            &arguments,
+        );
+    }
     let authority = state
         .active_handle()
         .ok_or_else(|| invalid("source authority is unavailable for contained probe"))?;
-    let target_path = plan.target_path.expect("filtered target");
-    let attacker_input = plan.attacker_input.expect("paired input");
-    let attempt_number = state.investigation.probes.len() + 1;
-    let id = format!("probe-{attempt_number}");
+    let attempt_number = attempt_index + 1;
     let request = ModuleJobRequest {
         schema: 1,
         source_handle: authority.handle,
         scope_revision: authority.scope_revision,
         operation: "linux.canary-disclosure.v1".into(),
-        specification: json!({"target_path":target_path,"attacker_input":attacker_input}),
+        specification: json!({"target_path":target_path,"attacker_input":arguments.join(" ")}),
         limits: ModuleJobLimits {
             memory_bytes: 128 * 1024 * 1024,
             storage_bytes: 16 * 1024 * 1024,
@@ -960,25 +1268,249 @@ fn schedule_probe(
         },
     };
     let key = format!("red-team-investigation-submit-{attempt_number}");
-    state.investigation.probes.push(ProbeAttempt {
-        id,
-        hypothesis_id: plan.hypothesis_id.clone(),
-        target_path,
-        attacker_input,
-        changed_dimension: plan.changed_dimension,
-        state: ProbeState::Planned,
-        host_job_id: None,
-        evidence: None,
-        detail: "registered before host execution".into(),
-    });
-    if let Some(hypothesis) =
-        state.hypotheses.iter_mut().find(|hypothesis| hypothesis.id.value == plan.hypothesis_id)
-    {
-        hypothesis.state = HypothesisState::Investigating;
-    }
     state.pending = Some(PendingRequest::JobSubmit { key: key.clone(), request: request.clone() });
     crate::state::save(parameters, state)?;
     crate::job_worker_action(state, key, request)
+}
+
+fn finish_probing(
+    parameters: &Value,
+    profile: &Option<ModuleHostProfile>,
+    state: &mut State,
+) -> Result<ModuleAction, Error> {
+    state.investigation.stage = InvestigationStage::Skeptic;
+    state.investigation.feedback = "All scheduled proof cases reached a retained terminal or blocked state. Review raw receipts independently; do not inherit discovery conclusions.".into();
+    state.investigation.round = state.investigation.round.saturating_add(1);
+    crate::state::save(parameters, state)?;
+    next(parameters, profile, state)
+}
+
+fn investigation_laboratory(state: &State) -> Option<&peritus_plugin_sdk::ModuleLaboratoryStatus> {
+    let snapshot = state.active_snapshot()?.snapshot_digest.as_str();
+    state.laboratory_statuses.iter().rev().find(|status| {
+        status.handle.recipe_id == crate::laboratory::SOURCE_RECIPE
+            && status.handle.source_snapshot == snapshot
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn schedule_laboratory_probe(
+    parameters: &Value,
+    profile: &Option<ModuleHostProfile>,
+    state: &mut State,
+    attempt_index: usize,
+    plan: &HypothesisPlan,
+    target_path: &str,
+    arguments: &[String],
+) -> Result<ModuleAction, Error> {
+    if !crate::laboratory::supports(profile) {
+        let probe = &mut state.investigation.probes[attempt_index];
+        probe.state = ProbeState::Blocked;
+        probe.detail = "generic disposable application laboratory is unavailable".into();
+        crate::state::save(parameters, state)?;
+        return schedule_probe(parameters, profile, state);
+    }
+    let Some(status) = investigation_laboratory(state).cloned() else {
+        return crate::laboratory::investigation_create_source(parameters, state);
+    };
+    let laboratory_id = status.handle.laboratory_id.clone();
+    match status.phase {
+        ModuleLaboratoryPhase::Created => {
+            crate::laboratory::investigation_lifecycle(parameters, state, &laboratory_id, "prepare")
+        }
+        ModuleLaboratoryPhase::Prepared | ModuleLaboratoryPhase::Stopped => {
+            crate::laboratory::investigation_lifecycle(parameters, state, &laboratory_id, "launch")
+        }
+        ModuleLaboratoryPhase::Ready => {
+            let canary = format!(
+                "peritus-red-team-canary-{}",
+                &digest(
+                    format!("{}\0{}", plan.hypothesis_id, status.handle.source_snapshot).as_bytes()
+                )[..24]
+            );
+            let substitute = |value: &str| value.replace("{{PERITUS_CANARY}}", &canary);
+            let process_arguments = arguments.iter().map(|value| substitute(value)).collect();
+            let process_stdin =
+                plan.stdin.as_deref().map(substitute).unwrap_or_default().into_bytes();
+            let process_environment = plan
+                .environment
+                .iter()
+                .map(|(name, value)| (name.clone(), substitute(value)))
+                .collect();
+            let probe = &mut state.investigation.probes[attempt_index];
+            probe.state = ProbeState::Running;
+            probe.host_job_id = Some(laboratory_id.clone());
+            probe.detail = format!(
+                "generic `{}` runtime admitted in disposable application laboratory",
+                plan.runtime.as_deref().unwrap_or("direct")
+            );
+            crate::state::save(parameters, state)?;
+            crate::laboratory::investigation_invoke_process(
+                parameters,
+                state,
+                &status,
+                ModuleLaboratoryProcessInput {
+                    schema: 1,
+                    runtime: plan.runtime.clone().unwrap_or_else(|| "direct".into()),
+                    entrypoint: target_path.into(),
+                    arguments: process_arguments,
+                    stdin: process_stdin,
+                    environment: process_environment,
+                    wall_millis: 600_000,
+                    expected_exit_codes: vec![0, 1, 2, 64, 65, 66, 70, 78],
+                    stdout_contains: Vec::new(),
+                    stderr_contains: Vec::new(),
+                },
+            )
+        }
+        ModuleLaboratoryPhase::Failed | ModuleLaboratoryPhase::Quarantined => {
+            let probe = &mut state.investigation.probes[attempt_index];
+            probe.state = ProbeState::Blocked;
+            probe.detail = status
+                .retained_error
+                .unwrap_or_else(|| "disposable application laboratory failed".into());
+            crate::state::save(parameters, state)?;
+            crate::laboratory::investigation_lifecycle(
+                parameters,
+                state,
+                &laboratory_id,
+                "teardown",
+            )
+        }
+        ModuleLaboratoryPhase::TornDown => {
+            crate::laboratory::investigation_create_source(parameters, state)
+        }
+    }
+}
+
+pub(crate) fn laboratory_probe_status(
+    state: &mut State,
+    laboratory: &ModuleLaboratoryReceipt,
+) -> Result<(), Error> {
+    let probe_index = state
+        .investigation
+        .probes
+        .iter()
+        .rposition(|probe| {
+            probe.state == ProbeState::Running
+                && probe.host_job_id.as_deref() == Some(laboratory.laboratory_id.as_str())
+        })
+        .ok_or_else(|| invalid("laboratory proof receipt has no active investigation probe"))?;
+    let probe = state.investigation.probes[probe_index].clone();
+    let plan = state
+        .investigation
+        .hypothesis_plans
+        .iter()
+        .find(|plan| plan.hypothesis_id == probe.hypothesis_id)
+        .ok_or_else(|| invalid("laboratory proof has no retained hypothesis plan"))?;
+    let snapshot = state
+        .active_snapshot()
+        .ok_or_else(|| invalid("laboratory proof has no active source snapshot"))?;
+    if laboratory.source_snapshot != snapshot.snapshot_digest {
+        return Err(invalid("laboratory proof receipt names a different source snapshot"));
+    }
+    let canary = format!(
+        "peritus-red-team-canary-{}",
+        &digest(format!("{}\0{}", plan.hypothesis_id, snapshot.snapshot_digest).as_bytes())[..24]
+    );
+    let canary_delivered = plan_delivers_canary(plan);
+    let stdout = laboratory.observation["stdout"].as_str().unwrap_or_default();
+    let stderr = laboratory.observation["stderr"].as_str().unwrap_or_default();
+    let disclosed = canary_delivered && (stdout.contains(&canary) || stderr.contains(&canary));
+    let oracle_matched = laboratory.observation["oracle_matched"].as_bool() == Some(true);
+    let verdict = if disclosed {
+        ModuleJobVerdict::ViolationObserved
+    } else if canary_delivered && oracle_matched && laboratory.process_cleanup_complete {
+        ModuleJobVerdict::PropertyHeldForCase
+    } else {
+        ModuleJobVerdict::Indeterminate
+    };
+    let receipt_bytes = serde_json::to_vec(laboratory)?;
+    let job_id = format!("laboratory-{}", &digest(&receipt_bytes)[..24]);
+    let authority = state
+        .active_handle()
+        .ok_or_else(|| invalid("laboratory proof has no active source authority"))?;
+    let target_digest = state
+        .investigation
+        .manifest_entries
+        .iter()
+        .find(|entry| entry.path == probe.target_path)
+        .map(|entry| entry.digest.clone())
+        .ok_or_else(|| {
+            invalid("laboratory proof entry point is absent from the source manifest")
+        })?;
+    let limits = laboratory
+        .observation
+        .get("effective_limits")
+        .cloned()
+        .ok_or_else(|| invalid("laboratory proof omitted the host-enforced resource limits"))
+        .and_then(|value| {
+            serde_json::from_value(value)
+                .map_err(|_| invalid("laboratory proof has invalid host-enforced resource limits"))
+        })?;
+    let receipt = ModuleJobReceipt {
+        schema: 1,
+        job_id: job_id.clone(),
+        operation: "linux.canary-disclosure.v1".into(),
+        request_digest: laboratory.request_digest.clone(),
+        module_digest: digest(env!("CARGO_PKG_VERSION").as_bytes()),
+        source_handle: authority.handle,
+        scope_revision: authority.scope_revision,
+        snapshot_digest: snapshot.snapshot_digest.clone(),
+        target_digest,
+        backend: laboratory.isolation_backend.clone(),
+        execution_plan_digest: laboratory.observation["execution_plan_digest"]
+            .as_str()
+            .unwrap_or(&laboratory.request_digest)
+            .into(),
+        oracle_digest: digest(
+            format!("laboratory-template-canary-nondisclosure-v3\0{canary}\0{canary_delivered}")
+                .as_bytes(),
+        ),
+        verdict,
+        terminal_disposition: laboratory.observation["terminal_disposition"]
+            .as_str()
+            .unwrap_or("indeterminate")
+            .into(),
+        exit_code: laboratory.observation["exit_code"]
+            .as_i64()
+            .and_then(|value| i32::try_from(value).ok()),
+        stdout_artifact: laboratory.observation["stdout_digest"]
+            .as_str()
+            .unwrap_or(&laboratory.request_digest)
+            .into(),
+        stderr_artifact: laboratory.observation["stderr_digest"]
+            .as_str()
+            .unwrap_or(&laboratory.request_digest)
+            .into(),
+        limits,
+        cleanup_complete: laboratory.process_cleanup_complete,
+        network_policy: laboratory.network_policy.clone(),
+        preparation: None,
+        patch: None,
+    };
+    let phase = if verdict == ModuleJobVerdict::Indeterminate {
+        ModuleJobPhase::Indeterminate
+    } else {
+        ModuleJobPhase::Completed
+    };
+    let status = ModuleJobStatus {
+        schema: 1,
+        job_id,
+        operation: receipt.operation.clone(),
+        request_digest: receipt.request_digest.clone(),
+        phase,
+        limits: receipt.limits.clone(),
+        detail: format!(
+            "Disposable `{}` source runtime completed; canary disclosed={disclosed}; oracle matched={oracle_matched}.",
+            plan.runtime.as_deref().unwrap_or("direct")
+        ),
+        receipt: Some(receipt),
+    };
+    crate::admit_job_status(state, &status)?;
+    state.investigation.probes[probe_index].host_job_id = Some(status.job_id.clone());
+    let _ = job_status(state, &status);
+    Ok(())
 }
 
 pub(crate) fn job_submitted(state: &mut State, job_id: &str) {
@@ -1059,7 +1591,8 @@ pub(crate) fn job_status(state: &mut State, status: &ModuleJobStatus) -> bool {
 }
 
 pub(crate) fn host_failure(state: &mut State, pending: &PendingRequest, detail: &str) {
-    if matches!(pending, PendingRequest::JobSubmit { .. } | PendingRequest::JobPoll { .. })
+    if (matches!(pending, PendingRequest::JobSubmit { .. } | PendingRequest::JobPoll { .. })
+        || pending.key().starts_with("red-team-investigation-laboratory-"))
         && let Some(probe) = state
             .investigation
             .probes

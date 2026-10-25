@@ -13,12 +13,12 @@
 | [file_fuzz.rs](file_fuzz.rs) | Phase 16 file/archive/parser/native-fault commands, exact-input validation, finding admission, coverage/resource receipts, history, and rejection probes. |
 | [workflow_state.rs](workflow_state.rs) | Phase 17 stateful workflow/concurrency commands, invariant-provenance validation, exact action and schedule receipts, finding admission, history, and rejection probes. |
 | [boundary_authority.rs](boundary_authority.rs) | Phase 18 private-network, TLS, platform-policy, contained-privilege, and delegated-authority commands, receipt validation, coverage, history, and rejection probes. |
-| [investigation.rs](investigation.rs) | Bounded inventory, separate discovery/skeptic roles, hypothesis and probe scheduling, steering, reuse and evidence-gated adjudication. |
-| [journey.rs](journey.rs) | Phase 20 complete-campaign planner and durable one-operation scheduler with shared TUI/WebUI controls, pause, steering, retry, skip, abort cleanup, restart recovery, and step-level evidence admission. |
+| [investigation.rs](investigation.rs) | Bounded inventory, separate discovery/skeptic roles, hypothesis and probe scheduling, explicit analysis-only gaps, canary-only generic process admission, redacted environment delivery, steering, reuse and evidence-gated adjudication. |
+| [journey.rs](journey.rs) | Phase 20 source-bound campaign planner, explicit adapter-gap ledger, and durable one-operation scheduler with shared TUI/WebUI controls, pause, steering, retry, skip, abort cleanup, restart recovery, step-level evidence admission, and terminal-state separation from final exports. |
 | [laboratory.rs](laboratory.rs) | Complete-source and compatibility laboratory commands, generic process invocations, typed lifecycle requests, opaque-handle projection, host-receipt admission, and TUI/WebUI status. |
 | [repair.rs](repair.rs) | Automatic root-cause patch planning, copy-only replay matrices, independent patch review, and final original-byte verification. |
 | [records.rs](records.rs) | Version-one campaign, scope, source, coverage, hypothesis, evidence, finding, patch, review, and report contracts. |
-| [report.rs](report.rs) | Honest Markdown/JSON/SARIF reports, exact patch files, complete-journey state, and replay bundles exposed through the final export projection. |
+| [report.rs](report.rs) | Honest Markdown/JSON/SARIF reports, exact patch files, complete-journey state, and replay bundles exposed after durable journey completion or explicitly labeled as partial beforehand. |
 | [source_analysis.rs](source_analysis.rs) | Phase 12 registered static-analyzer commands, typed receipt admission, source-lead validation, coverage mapping, and human-readable result/history projections. |
 | [state.rs](state.rs) | Atomic schema-eighteen/Phase 20 campaign checkpoint, earlier-phase migration, complete-journey progress, investigation/repair state, class-specific and attack-graph evidence, laboratory lifecycles, corruption fail-closed behavior, and selective invalidation. |
 | [worker.rs](worker.rs) | Module-owned worker registry, adapter lifecycle, proof execution, and opaque generic-worker dispatch. |

@@ -79,8 +79,8 @@ pub(crate) fn actions(state: &state::State) -> Vec<ModuleMenuAction> {
 
 fn plan_actions() -> Vec<ModuleMenuAction> {
     vec![
-        action("View complete campaign plan", "campaign-plan", true),
-        action("Start complete campaign", "campaign-start", true),
+        action("View source-bound campaign plan", "campaign-plan", true),
+        action("Start source-bound campaign", "campaign-start", true),
     ]
 }
 
@@ -109,7 +109,7 @@ fn start(
     if !missing.is_empty() {
         return Ok(reply(
             format!(
-                "The complete campaign is blocked before preparation because this host is missing: {}. Update Peritus and retry; no ambient fallback was attempted.",
+                "The source-bound campaign is blocked before preparation because this host is missing: {}. Update Peritus and retry; no ambient fallback was attempted.",
                 missing.join(", ")
             ),
             profile,
@@ -117,15 +117,21 @@ fn start(
             None,
         ));
     }
+    let steps = plan();
+    let failures = steps
+        .iter()
+        .filter(|step| step.state == JourneyStepState::Skipped)
+        .map(|step| step.detail.clone())
+        .collect();
     state.journey = state::JourneyState {
         schema: 1,
         stage: state::JourneyStage::Running,
         source_snapshot: snapshot,
         cursor: 0,
-        steps: plan(),
+        steps,
         laboratories: Vec::new(),
         steering: Vec::new(),
-        failures: Vec::new(),
+        failures,
     };
     state::save(parameters, state)?;
     Ok(reply(
@@ -178,18 +184,27 @@ fn next(
         state::save(parameters, state)?;
         return Ok(reply(view(state), profile, super::actions(state), None));
     }
+    advance_accounted_steps(state);
     if state.journey.cursor >= state.journey.steps.len() {
         state.journey.stage = JourneyStage::Complete;
         state.campaign.state = crate::records::CampaignState::Completed;
         state::save(parameters, state)?;
         return Ok(reply(
-            "The complete supported-profile journey finished. The retained reports distinguish evidence-backed results, skipped or blocked work, and residual gaps; no expert-parity or universal-coverage claim is made.",
+            "The source-bound application journey finished. The retained reports distinguish evidence-backed results, pre-accounted adapter gaps, skipped or blocked work, and residual gaps; no expert-parity or universal-coverage claim is made.",
             profile,
             super::actions(state),
             None,
         ));
     }
     dispatch_current(parameters, profile, state)
+}
+
+fn advance_accounted_steps(state: &mut state::State) {
+    while state.journey.steps.get(state.journey.cursor).is_some_and(|step| {
+        matches!(step.state, JourneyStepState::Complete | JourneyStepState::Skipped)
+    }) {
+        state.journey.cursor += 1;
+    }
 }
 
 fn dispatch_current(
@@ -234,10 +249,7 @@ fn reconcile(state: &mut state::State) -> Result<(), Error> {
         return Ok(());
     }
     if !satisfied(state, &step, &now)? {
-        let detail = format!(
-            "Step `{}` returned without the required receipt or terminal state; it was not counted as complete.",
-            step.label
-        );
+        let detail = unsatisfied_detail(state, &step);
         state.journey.steps[cursor].state = JourneyStepState::Blocked;
         state.journey.steps[cursor].detail = detail.clone();
         state.journey.failures.push(detail);
@@ -281,10 +293,15 @@ fn satisfied(
         "graph-run" => state.attack_graph_observations.len(),
         _ => 0,
     };
+    if command == "analyze" {
+        return Ok(state
+            .analysis_observations
+            .iter()
+            .any(|observation| observation.source_snapshot == state.journey.source_snapshot));
+    }
     if matches!(
         command,
-        "analyze"
-            | "api-run"
+        "api-run"
             | "browser-run"
             | "identity-run"
             | "file-fuzz-run"
@@ -296,7 +313,11 @@ fn satisfied(
     }
     if command == "lab-run-auto" {
         return Ok(now.laboratory_receipts > step.baseline.laboratory_receipts
-            && latest_phase(state) == Some(ModuleLaboratoryPhase::Ready));
+            && latest_phase(state) == Some(ModuleLaboratoryPhase::Ready)
+            && state.laboratory_receipts.last().is_some_and(|receipt| {
+                receipt.operation == "process.execute.v1"
+                    && receipt.observation["oracle_matched"].as_bool() == Some(true)
+            }));
     }
     if command.starts_with("lab-create ") {
         return Ok(now.laboratory_statuses > step.baseline.laboratory_statuses
@@ -305,13 +326,19 @@ fn satisfied(
     let phase = match command {
         "lab-prepare" => Some(ModuleLaboratoryPhase::Prepared),
         "lab-launch" => Some(ModuleLaboratoryPhase::Ready),
+        "lab-snapshot" => Some(ModuleLaboratoryPhase::Ready),
         "lab-stop" => Some(ModuleLaboratoryPhase::Stopped),
         "lab-teardown" => Some(ModuleLaboratoryPhase::TornDown),
         _ => None,
     };
     if let Some(phase) = phase {
+        let expected_operation = step.command.trim_start_matches("lab-");
         return Ok(now.laboratory_receipts > step.baseline.laboratory_receipts
             && latest_phase(state) == Some(phase)
+            && state
+                .laboratory_receipts
+                .last()
+                .is_some_and(|receipt| receipt.operation == expected_operation)
             && (phase != ModuleLaboratoryPhase::TornDown
                 || state
                     .laboratory_statuses
@@ -334,6 +361,31 @@ fn satisfied(
         return Ok(now.reports > step.baseline.reports);
     }
     Ok(false)
+}
+
+fn unsatisfied_detail(state: &state::State, step: &state::JourneyStep) -> String {
+    if step.command == "lab-run-auto"
+        && let Some(receipt) = state
+            .laboratory_receipts
+            .get(step.baseline.laboratory_receipts..)
+            .and_then(|receipts| receipts.last())
+        && receipt.operation == "process.execute.v1"
+    {
+        let exit = receipt.observation["exit_code"]
+            .as_i64()
+            .map_or_else(|| "unknown".into(), |code| code.to_string());
+        let terminal = receipt.observation["terminal_disposition"]
+            .as_str()
+            .unwrap_or("unknown terminal state");
+        return format!(
+            "Step `{}` executed the real target, but its oracle did not match (exit {exit}; {terminal}); it was not counted as complete.",
+            step.label
+        );
+    }
+    format!(
+        "Step `{}` returned without the required receipt or terminal state; it was not counted as complete.",
+        step.label
+    )
 }
 
 fn retry(
@@ -655,15 +707,53 @@ fn plan() -> Vec<state::JourneyStep> {
         "lab-teardown",
         None,
     ));
-    for (id, label, command) in [
-        ("export-markdown", "Export Markdown report", "report"),
-        ("export-json", "Export JSON report", "report-json"),
-        ("export-sarif", "Export SARIF projection", "sarif"),
-        ("export-replay", "Export replay bundle", "bundle"),
+    for (id, label, detail) in [
+        (
+            "api-applicability-gap",
+            "Account for HTTP/API adapter applicability",
+            "HTTP/API adapter not executed: the selected source campaign has no independently derived linux.python-http-api.v1 controller/service binding. This remains an explicit application coverage gap.",
+        ),
+        (
+            "browser-applicability-gap",
+            "Account for browser adapter applicability",
+            "Browser adapter not executed: no ready application HTTP laboratory was derived from the selected source. Browser trust coverage remains an explicit gap.",
+        ),
+        (
+            "identity-applicability-gap",
+            "Account for identity adapter applicability",
+            "Identity adapter not executed: no independently derived identity topology and compatible ready laboratory exist for the selected application. Authentication and authorization coverage remain an explicit gap.",
+        ),
+        (
+            "file-applicability-gap",
+            "Account for file/parser adapter applicability",
+            "File/parser adapter not executed: no compatible application parser contract was independently derived from the selected source. File and parser runtime coverage remain an explicit gap.",
+        ),
+        (
+            "workflow-applicability-gap",
+            "Account for workflow adapter applicability",
+            "Workflow adapter not executed: no application-specific state-machine contract was independently derived from the selected source. Stateful and concurrency coverage remain an explicit gap.",
+        ),
+        (
+            "boundary-applicability-gap",
+            "Account for boundary adapter applicability",
+            "Boundary adapter not executed: no compatible private network, TLS, or delegated-authority contract was independently derived from the selected source. Boundary runtime coverage remains an explicit gap.",
+        ),
+        (
+            "graph-applicability-gap",
+            "Account for attack-graph adapter applicability",
+            "Attack-graph adapter not executed: the selected application lacks the prerequisite source, HTTP, and browser receipts. Cross-adapter chain coverage remains an explicit gap.",
+        ),
     ] {
-        steps.push(step(id, label, command, None));
+        steps.push(gap_step(id, label, detail));
     }
     steps
+}
+
+fn gap_step(id: &str, label: &str, detail: &str) -> state::JourneyStep {
+    let mut value = step(id, label, "accounted-gap", None);
+    value.state = JourneyStepState::Skipped;
+    value.detail = detail.into();
+    value
 }
 
 fn add_open_lab(steps: &mut Vec<state::JourneyStep>, alias: &str, create: &str) {
@@ -690,7 +780,7 @@ fn add_open_lab(steps: &mut Vec<state::JourneyStep>, alias: &str, create: &str) 
 fn plan_text() -> String {
     let steps = plan();
     let mut text = format!(
-        "# Source-bound Red Team campaign\n\n{} sequential steps; at most one host operation is active. The journey scans the exact immutable source, copies the complete tree, executes a discovered real entry point without requiring target-specific contracts, records copied-tree effects, proves cleanup and original-source integrity, and exports Markdown, JSON, SARIF and replay artifacts. Class-specific adapters remain separate applicable-method steps; their bundled fixtures are calibration targets and are never substituted for the selected application.\n\n",
+        "# Source-bound Red Team campaign\n\n{} sequential or pre-accounted steps; at most one host operation is active. The journey scans the exact immutable source, copies the complete tree, executes a discovered real entry point without requiring target-specific contracts, records copied-tree effects, and proves cleanup plus original-source integrity before it becomes complete. Every registered class-specific adapter is also represented in the retained ledger. An adapter without an independently derived compatible application contract is pre-accounted as a skipped coverage gap; bundled fixtures are calibration targets and are never substituted for the selected application. Markdown, JSON, SARIF, patch, and replay exports become available only after the journey reaches its durable terminal state, so final artifacts cannot describe an in-progress campaign.\n\n",
         steps.len()
     );
     for (index, step) in steps.iter().enumerate() {

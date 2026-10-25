@@ -12,6 +12,7 @@ use peritus_plugin_sdk::{
 use serde_json::{Value, json};
 
 const RECIPE: &str = "linux.python-unix-store.v1";
+pub(crate) const SOURCE_RECIPE: &str = "linux.complete-source.v1";
 const HTTP_RECIPE: &str = "linux.python-http-api.v1";
 const PROCESS_OPERATION: &str = "process.execute.v1";
 const FIXTURE_APPLICATION: &str = "modules/red-team/corpus/laboratory-mixed/application.py";
@@ -225,6 +226,7 @@ pub(crate) fn command(
             let entrypoint = candidate["entrypoint"]
                 .as_str()
                 .ok_or_else(|| invalid("host launch candidate has no entrypoint"))?;
+            let arguments = if runtime == "cargo" { vec!["--help".into()] } else { Vec::new() };
             invoke_process(
                 parameters,
                 state,
@@ -232,10 +234,10 @@ pub(crate) fn command(
                     schema: 1,
                     runtime: runtime.into(),
                     entrypoint: entrypoint.into(),
-                    arguments: Vec::new(),
+                    arguments,
                     stdin: Vec::new(),
                     environment: std::collections::BTreeMap::new(),
-                    wall_millis: 30_000,
+                    wall_millis: 300_000,
                     expected_exit_codes: vec![0],
                     stdout_contains: Vec::new(),
                     stderr_contains: Vec::new(),
@@ -338,6 +340,8 @@ pub(crate) fn admit(
     pending: PendingRequest,
     output: Value,
 ) -> Result<ModuleAction, Error> {
+    let investigation_request = pending.key().starts_with("red-team-investigation-laboratory-");
+    let mut investigation_receipt = None;
     let text = match pending {
         PendingRequest::LaboratoryCatalog { .. } => {
             let catalog: ModuleLaboratoryCatalog = serde_json::from_value(output)?;
@@ -356,6 +360,7 @@ pub(crate) fn admit(
             }
             state.laboratory_statuses.push(result.status.clone());
             if let Some(receipt) = result.receipt {
+                investigation_receipt = Some(receipt.clone());
                 state.laboratory_receipts.push(receipt.clone());
                 format!(
                     "{}\n\n## Module-authored receipt\n\n- Operation: `{}`\n- Request: `{}`\n- Application source: `{}`\n- Backing service source: `{}`\n- Isolation: `{}`\n- Network: `{}`\n- Process cleanup: {}\n- Original source unchanged: `{}`\n\n```json\n{}\n```",
@@ -392,6 +397,7 @@ pub(crate) fn admit(
             }
             state.laboratory_statuses.push(result.status.clone());
             if let Some(receipt) = result.receipt {
+                investigation_receipt = Some(receipt.clone());
                 state.laboratory_receipts.push(receipt.clone());
                 format!(
                     "{}\n\n## Generic host receipt\n\n- Operation: `{}`\n- Request: `{}`\n- Isolation: `{}`\n- Network: `{}`\n- Process cleanup: {}\n- Original source unchanged: `{}`",
@@ -412,8 +418,88 @@ pub(crate) fn admit(
         _ => return Err(invalid("non-laboratory pending request reached laboratory admission")),
     };
     state.pending = None;
+    if investigation_request {
+        if let Some(receipt) = investigation_receipt.as_ref()
+            && receipt.operation == PROCESS_OPERATION
+        {
+            crate::investigation::laboratory_probe_status(state, receipt)?;
+        }
+        state::save(parameters, state)?;
+        return crate::investigation::next(parameters, profile, state);
+    }
     state::save(parameters, state)?;
     Ok(reply(text, profile, super::actions(state), None))
+}
+
+pub(crate) fn investigation_create_source(
+    parameters: &Value,
+    state: &mut state::State,
+) -> Result<ModuleAction, Error> {
+    let source = state
+        .active_handle()
+        .ok_or_else(|| invalid("capture source before creating an investigation laboratory"))?;
+    let request = ModuleLaboratorySourceCreateRequest { schema: 1, source };
+    service(
+        parameters,
+        state,
+        PendingRequest::LaboratorySourceCreate {
+            key: next_investigation_key(state, "create-source"),
+            request,
+            target: None,
+        },
+        "create-source",
+    )
+}
+
+pub(crate) fn investigation_lifecycle(
+    parameters: &Value,
+    state: &mut state::State,
+    laboratory_id: &str,
+    operation: &str,
+) -> Result<ModuleAction, Error> {
+    let request =
+        ModuleLaboratoryLifecycleRequest { schema: 1, laboratory_id: laboratory_id.into() };
+    service(
+        parameters,
+        state,
+        PendingRequest::LaboratoryLifecycle {
+            key: next_investigation_key(state, operation),
+            operation: operation.into(),
+            request,
+        },
+        operation,
+    )
+}
+
+pub(crate) fn investigation_invoke_process(
+    parameters: &Value,
+    state: &mut state::State,
+    status: &peritus_plugin_sdk::ModuleLaboratoryStatus,
+    input: ModuleLaboratoryProcessInput,
+) -> Result<ModuleAction, Error> {
+    let request = ModuleLaboratoryInvokeRequest {
+        schema: 1,
+        laboratory_id: status.handle.laboratory_id.clone(),
+        endpoint_handle: status.handle.endpoint_handle.clone(),
+        operation: PROCESS_OPERATION.into(),
+        input: serde_json::to_value(input)?,
+    };
+    service(
+        parameters,
+        state,
+        PendingRequest::LaboratoryInvoke { key: next_investigation_key(state, "process"), request },
+        "invoke",
+    )
+}
+
+fn next_investigation_key(state: &state::State, operation: &str) -> String {
+    format!(
+        "red-team-investigation-laboratory-{operation}-{}",
+        state.laboratory_statuses.len()
+            + state.laboratory_receipts.len()
+            + state.laboratory_errors.len()
+            + state.investigation.probes.len()
+    )
 }
 
 pub(crate) fn supports(profile: &Option<ModuleHostProfile>) -> bool {

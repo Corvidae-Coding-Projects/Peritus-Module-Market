@@ -134,7 +134,7 @@ pub(crate) fn publish_report(
         "The Phase 17 workflow adapter covers one pinned approval/accounting domain and one retained deterministic two-worker schedule. Application-specific contracts, arbitrary schedules, distributed stores, and non-Linux runtimes remain explicit gaps.".into(),
         "The Phase 18 boundary adapter covers module-private Unix-socket DNS, HTTP and TLS peers, deny-all IP networking, lab certificates, copied policy/privilege checks, and copied-application authority cases. Live cloud providers, host-privileged runtimes, arbitrary protocols, public PKI, and production infrastructure remain explicit gaps.".into(),
         "The Phase 19 attack graph proves one stored-content chain across exact source, private HTTP, and isolated Chromium receipts. Other cross-adapter combinations, distributed systems, public networks, non-browser clients, and privileged-host chains remain explicit gaps until separately registered profiles execute them.".into(),
-        "The Phase 20 complete journey coordinates every currently registered profile one host operation at a time and preserves restart, steering, partial-report, cleanup, and export state. It does not claim universal vulnerability coverage, expert parity, or support for unregistered adapters and target technologies.".into(),
+        "The Phase 20 source-bound journey coordinates source analysis, real entry-point execution, cleanup, and explicit per-adapter gap accounting one host operation at a time. Final exports are generated only after that journey reaches its durable terminal state. Class-specific execution still requires independently derived compatible application contracts. It does not claim universal vulnerability coverage, expert parity, or support for unregistered adapters and target technologies.".into(),
     ];
     if !matches!(state.investigation.stage, crate::state::InvestigationStage::Complete) {
         limitations.push(format!(
@@ -1082,10 +1082,21 @@ fn markdown(state: &State, limitations: &[String]) -> String {
             .filter(|probe| probe.hypothesis_id == hypothesis.id.value)
         {
             text.push_str(&format!(
-                "- Probe `{}`: `{:?}`; target `{}`; changed dimension: {}; host job `{}`; {}\n",
+                "- Probe `{}`: `{:?}`; target `{}`; argv elements: {}; stdin template: `{}`; environment values: {}; changed dimension: {}; host job `{}`; {}\n",
                 probe.id,
                 probe.state,
                 probe.target_path,
+                probe.arguments.len(),
+                probe.stdin_digest.as_deref().unwrap_or("none"),
+                if probe.environment_digests.is_empty() {
+                    "none".into()
+                } else {
+                    probe.environment_digests
+                        .iter()
+                        .map(|(name, value)| format!("{name}=sha256:{value}"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                },
                 probe.changed_dimension,
                 probe.host_job_id.as_deref().unwrap_or("not submitted"),
                 probe.detail,
