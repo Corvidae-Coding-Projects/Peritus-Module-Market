@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Pod
+spec:
+  containers:
+    - name: service
+      securityContext:
+        runAsNonRoot: true

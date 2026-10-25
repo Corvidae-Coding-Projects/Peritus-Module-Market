@@ -20,6 +20,22 @@ pub enum RecordKind {
     SourceSnapshot,
     /// One security-family and application-surface coverage statement.
     Coverage,
+    /// One versioned target profile compiled from retained source evidence.
+    TargetProfile,
+    /// One application component owned by a target profile.
+    Component,
+    /// One concrete entry surface of an application component.
+    Surface,
+    /// One directed trust boundary between application components.
+    TrustBoundary,
+    /// One attacker identity and application configuration pairing.
+    IdentityConfiguration,
+    /// One security property, with versioned standards mappings where available.
+    SecurityProperty,
+    /// One source or runtime examination method advertised by the coordinator.
+    Method,
+    /// One surface-by-identity-by-property-by-method coverage obligation.
+    CoverageCell,
     /// One falsifiable security claim awaiting or carrying evidence.
     Hypothesis,
     /// One host-owned asynchronous operation.
@@ -201,6 +217,199 @@ pub struct CoverageRecord {
     pub supersedes: Option<RecordId>,
 }
 
+/// Coarse application shape used to select compatible security methods.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TargetProfileKind {
+    /// A command-line application.
+    CommandLine,
+    /// A native desktop or background application.
+    NativeApplication,
+    /// A browser-served web application.
+    WebApplication,
+    /// A machine-facing HTTP or RPC API.
+    ApiService,
+    /// A browser client with client-side trust boundaries.
+    BrowserClient,
+    /// Multiple cooperating services or clients.
+    MultiService,
+    /// A shape not represented by the current compiler vocabulary.
+    Other,
+}
+
+/// Versioned external or module-owned property identifier.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct StandardReference {
+    /// Catalog name: `ASVS`, `WSTG`, `CWE`, or `PERITUS`.
+    pub catalog: String,
+    /// Exact catalog/schema version.
+    pub version: String,
+    /// Identifier in that version of the catalog.
+    pub identifier: String,
+}
+
+/// One current target profile derived from retained source evidence.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct TargetProfileRecord {
+    pub schema: u16,
+    pub id: RecordId,
+    pub campaign: RecordId,
+    pub scope_revision: RecordId,
+    pub name: String,
+    pub kind: TargetProfileKind,
+    pub operating_systems: Vec<String>,
+    pub languages: Vec<String>,
+    pub services: Vec<String>,
+    pub stores: Vec<String>,
+    pub interfaces: Vec<String>,
+    pub unavailable_claims: Vec<String>,
+    pub evidence: Vec<RecordId>,
+}
+
+/// One source-owning application component.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ApplicationComponentRecord {
+    pub schema: u16,
+    pub id: RecordId,
+    pub campaign: RecordId,
+    pub scope_revision: RecordId,
+    pub profile: RecordId,
+    pub name: String,
+    pub kind: String,
+    pub source_paths: Vec<String>,
+}
+
+/// Lifecycle of a discovered surface across source refreshes.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SurfaceState {
+    Current,
+    NeedsRefresh,
+    Removed,
+}
+
+/// Interface class used for method compatibility checks.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SurfaceKind {
+    CommandLine,
+    Native,
+    Web,
+    Api,
+    Browser,
+    Service,
+    File,
+    Library,
+    Other,
+}
+
+/// One concrete application entry surface.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ApplicationSurfaceRecord {
+    pub schema: u16,
+    pub id: RecordId,
+    pub campaign: RecordId,
+    pub scope_revision: RecordId,
+    pub profile: RecordId,
+    pub component: RecordId,
+    pub name: String,
+    pub kind: SurfaceKind,
+    pub entry_point: String,
+    pub source_paths: Vec<String>,
+    pub state: SurfaceState,
+    pub invalidated_by: Option<String>,
+}
+
+/// One directed trust boundary in the target graph.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct TrustBoundaryRecord {
+    pub schema: u16,
+    pub id: RecordId,
+    pub campaign: RecordId,
+    pub scope_revision: RecordId,
+    pub profile: RecordId,
+    pub name: String,
+    pub from_component: RecordId,
+    pub to_component: RecordId,
+    pub protected_assets: Vec<String>,
+}
+
+/// One attacker identity and target configuration combination.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct IdentityConfigurationRecord {
+    pub schema: u16,
+    pub id: RecordId,
+    pub campaign: RecordId,
+    pub scope_revision: RecordId,
+    pub profile: RecordId,
+    pub name: String,
+    pub attacker: String,
+    pub privileges: Vec<String>,
+    pub configuration: Vec<String>,
+}
+
+/// One security property independently addressable by coverage cells.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct SecurityPropertyRecord {
+    pub schema: u16,
+    pub id: RecordId,
+    pub campaign: RecordId,
+    pub family: String,
+    pub statement: String,
+    pub standards: Vec<StandardReference>,
+}
+
+/// Whether a method can presently produce evidence on this host/module generation.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MethodAvailability {
+    Available,
+    Unsupported,
+}
+
+/// One coordinator-owned source or runtime examination method.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct MethodRecord {
+    pub schema: u16,
+    pub id: RecordId,
+    pub campaign: RecordId,
+    pub name: String,
+    pub availability: MethodAvailability,
+    pub operation: Option<String>,
+    pub required_capability: Option<String>,
+    pub limitation: String,
+}
+
+/// One compiled coverage obligation. `Examined` means only that this exact method ran.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct CoverageCellRecord {
+    pub schema: u16,
+    pub id: RecordId,
+    pub campaign: RecordId,
+    pub scope_revision: RecordId,
+    pub profile: RecordId,
+    pub surface: RecordId,
+    pub identity_configuration: RecordId,
+    pub security_property: RecordId,
+    pub method: RecordId,
+    pub family: String,
+    pub state: CoverageState,
+    pub reason: String,
+    pub source_paths: Vec<String>,
+    pub evidence: Vec<RecordId>,
+    pub invalidated_by: Option<String>,
+    pub supersedes: Option<RecordId>,
+}
+
 /// Lifecycle of a falsifiable security hypothesis.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -293,6 +502,22 @@ pub struct JobRecord {
 pub enum EvidenceKind {
     /// Exact source file/range observation.
     Source,
+    /// Host-authored deterministic analysis over exact immutable source bytes.
+    Analysis,
+    /// Host-captured HTTP/API traffic and copied-state oracle evidence.
+    HttpApi,
+    /// Host-captured real-browser, client-state, traffic, screenshot and trace evidence.
+    BrowserClient,
+    /// Host-captured authentication, session, authorization, tenancy, and redaction evidence.
+    IdentityAccess,
+    /// Host-captured filesystem, archive, parser, fuzzing, and native-fault evidence.
+    FileFuzz,
+    /// Host-captured stateful workflow, schedule, retry, and business-invariant evidence.
+    WorkflowState,
+    /// Host-captured private-network, TLS, privilege-policy, and delegated-authority evidence.
+    BoundaryAuthority,
+    /// Host-composed cross-adapter graph, counterfactual, and repair replay evidence.
+    AttackGraph,
     /// Build or preparation observation.
     Build,
     /// Trusted controller/evaluator execution receipt.
@@ -461,6 +686,9 @@ pub struct ReportRecord {
     pub markdown_artifact: String,
     /// Content-addressed structured JSON report artifact.
     pub json_artifact: String,
+    /// Content-addressed SARIF 2.1.0 projection artifact.
+    #[serde(default)]
+    pub sarif_artifact: Option<String>,
     /// Content-addressed replay bundle, when the report includes Phase-six delivery artifacts.
     #[serde(default)]
     pub reproduction_bundle_artifact: Option<String>,

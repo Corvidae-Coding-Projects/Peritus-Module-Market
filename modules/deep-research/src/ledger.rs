@@ -168,11 +168,11 @@ impl Research {
         let mut ids = Vec::new();
         for entry in entries {
             let entry = entry?;
-            if entry.file_type()?.is_file() {
-                if let Some(id) = entry.path().file_stem().and_then(|s| s.to_str()) {
-                    check_id(id)?;
-                    ids.push(id.to_owned());
-                }
+            if entry.file_type()?.is_file()
+                && let Some(id) = entry.path().file_stem().and_then(|s| s.to_str())
+            {
+                check_id(id)?;
+                ids.push(id.to_owned());
             }
         }
         ids.sort();
@@ -295,10 +295,10 @@ impl Research {
             // Diagnose offsets using only passages this role already observed.
             // Keep the error bounded even when an exact phrase occurs repeatedly.
             for (start, _) in page.text.match_indices(quote).take(9) {
-                if matches.len() < 9 {
-                    if let Some(offset) = page.offset.checked_add(start as u64) {
-                        matches.insert(offset);
-                    }
+                if matches.len() < 9
+                    && let Some(offset) = page.offset.checked_add(start as u64)
+                {
+                    matches.insert(offset);
                 }
             }
         }
@@ -819,7 +819,7 @@ impl Research {
             None => "\nLegacy assessment: source relationships have not been reassessed under the current inquiry standard.\n".into(),
         };
         Ok(format!(
-            "# Evidence {index}\n\n{}\n\nAssessment: {}. Scope: {}. Limitations: {}\n\nRationale: {}\nAuthority: {}\nMethods: {}\nIndependence: {}\n\n[Source]({}) — {}; {}; chain {}\nSource {} bytes {}..{}; admission {}\n\n> {}\n\nInterpretation: {}\nReport digest: {id}\n",
+            "# Evidence {index}\n\n{}\n\nAssessment: {}. Scope: {}. Limitations: {}\n\nRationale: {}\nAuthority: {}\nMethods: {}\nIndependence: {}\n\n[Source]({}) — {}; {}; chain {}\nSource {} bytes {}..{}; admission {}\n\n> {}\n\nInterpretation: {}{}\nReport digest: {id}\n",
             a.claim,
             a.decision,
             a.scope,
@@ -837,7 +837,8 @@ impl Research {
             c.offset + c.quote.len() as u64,
             finding.admission,
             c.quote.replace('\n', "\n> "),
-            format!("{}{provenance}", finding.interpretation)
+            finding.interpretation,
+            provenance,
         ))
     }
     /// Human-readable report with qualifications, source ranges and explicit unknowns.

@@ -2,9 +2,17 @@
 
 use crate::{Error, invalid, records::*};
 use peritus_plugin_sdk::{
-    ModuleJobCancelRequest, ModuleJobLogRequest, ModuleJobReceipt, ModuleJobRequest,
-    ModuleJobStatusRequest, ModulePatchReceipt, ScopedSourceAuthority, ScopedSourceEntry,
-    ScopedSourceHandle, ScopedSourceVerification, ScopedSourceVerifyRequest,
+    ModuleAdapterCancelRequest, ModuleAdapterCatalog, ModuleAdapterCompleteRequest,
+    ModuleAdapterExecuteRequest, ModuleAdapterExecutionReceipt, ModuleAdapterPreparationHandle,
+    ModuleAdapterPrepareRequest, ModuleAdapterRemoveRequest, ModuleAdapterStatus,
+    ModuleAdapterStatusRequest, ModuleAttackGraphObservation, ModuleBoundaryObservation,
+    ModuleBrowserObservation, ModuleFileFuzzObservation, ModuleHttpApiObservation,
+    ModuleIdentityAccessObservation, ModuleJobCancelRequest, ModuleJobLogRequest, ModuleJobReceipt,
+    ModuleJobRequest, ModuleJobStatusRequest, ModuleLaboratoryCatalog,
+    ModuleLaboratoryCreateRequest, ModuleLaboratoryInvokeRequest, ModuleLaboratoryLifecycleRequest,
+    ModuleLaboratoryReceipt, ModuleLaboratoryStatus, ModulePatchReceipt,
+    ModuleSourceAnalysisObservation, ModuleWorkflowObservation, ScopedSourceAuthority,
+    ScopedSourceEntry, ScopedSourceHandle, ScopedSourceVerification, ScopedSourceVerifyRequest,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -13,8 +21,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
-pub(crate) const STATE_SCHEMA: u16 = 6;
-pub(crate) const PHASE: u8 = 6;
+pub(crate) const STATE_SCHEMA: u16 = 18;
+pub(crate) const PHASE: u8 = 20;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -27,6 +35,72 @@ pub(crate) struct State {
     pub(crate) scopes: Vec<ScopeRevisionRecord>,
     pub(crate) snapshots: Vec<SourceSnapshotRecord>,
     pub(crate) coverage: Vec<CoverageRecord>,
+    #[serde(default)]
+    pub(crate) target_profiles: Vec<TargetProfileRecord>,
+    #[serde(default)]
+    pub(crate) application_components: Vec<ApplicationComponentRecord>,
+    #[serde(default)]
+    pub(crate) application_surfaces: Vec<ApplicationSurfaceRecord>,
+    #[serde(default)]
+    pub(crate) trust_boundaries: Vec<TrustBoundaryRecord>,
+    #[serde(default)]
+    pub(crate) identity_configurations: Vec<IdentityConfigurationRecord>,
+    #[serde(default)]
+    pub(crate) security_properties: Vec<SecurityPropertyRecord>,
+    #[serde(default)]
+    pub(crate) methods: Vec<MethodRecord>,
+    #[serde(default)]
+    pub(crate) coverage_cells: Vec<CoverageCellRecord>,
+    #[serde(default)]
+    pub(crate) adapter_catalog: Option<ModuleAdapterCatalog>,
+    #[serde(default)]
+    pub(crate) adapter_preparation: Option<ModuleAdapterPreparationHandle>,
+    #[serde(default)]
+    pub(crate) adapter_statuses: Vec<ModuleAdapterStatus>,
+    #[serde(default)]
+    pub(crate) adapter_receipts: Vec<ModuleAdapterExecutionReceipt>,
+    #[serde(default)]
+    pub(crate) adapter_errors: Vec<String>,
+    #[serde(default)]
+    pub(crate) analysis_observations: Vec<ModuleSourceAnalysisObservation>,
+    #[serde(default)]
+    pub(crate) analysis_evidence: Vec<EvidenceRecord>,
+    #[serde(default)]
+    pub(crate) api_observations: Vec<ModuleHttpApiObservation>,
+    #[serde(default)]
+    pub(crate) api_evidence: Vec<EvidenceRecord>,
+    #[serde(default)]
+    pub(crate) browser_observations: Vec<ModuleBrowserObservation>,
+    #[serde(default)]
+    pub(crate) browser_evidence: Vec<EvidenceRecord>,
+    #[serde(default)]
+    pub(crate) identity_observations: Vec<ModuleIdentityAccessObservation>,
+    #[serde(default)]
+    pub(crate) identity_evidence: Vec<EvidenceRecord>,
+    #[serde(default)]
+    pub(crate) file_fuzz_observations: Vec<ModuleFileFuzzObservation>,
+    #[serde(default)]
+    pub(crate) file_fuzz_evidence: Vec<EvidenceRecord>,
+    #[serde(default)]
+    pub(crate) workflow_observations: Vec<ModuleWorkflowObservation>,
+    #[serde(default)]
+    pub(crate) workflow_evidence: Vec<EvidenceRecord>,
+    #[serde(default)]
+    pub(crate) boundary_observations: Vec<ModuleBoundaryObservation>,
+    #[serde(default)]
+    pub(crate) boundary_evidence: Vec<EvidenceRecord>,
+    #[serde(default)]
+    pub(crate) attack_graph_observations: Vec<ModuleAttackGraphObservation>,
+    #[serde(default)]
+    pub(crate) attack_graph_evidence: Vec<EvidenceRecord>,
+    #[serde(default)]
+    pub(crate) laboratory_catalog: Option<ModuleLaboratoryCatalog>,
+    #[serde(default)]
+    pub(crate) laboratory_statuses: Vec<ModuleLaboratoryStatus>,
+    #[serde(default)]
+    pub(crate) laboratory_receipts: Vec<ModuleLaboratoryReceipt>,
+    #[serde(default)]
+    pub(crate) laboratory_errors: Vec<String>,
     pub(crate) hypotheses: Vec<HypothesisRecord>,
     pub(crate) observations: Vec<SourceObservation>,
     #[serde(default)]
@@ -51,6 +125,95 @@ pub(crate) struct State {
     pub(crate) repair: RepairState,
     #[serde(default)]
     pub(crate) original_verification: Option<ScopedSourceVerification>,
+    #[serde(default)]
+    pub(crate) journey: JourneyState,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum JourneyStage {
+    #[default]
+    Inactive,
+    Running,
+    Paused,
+    Blocked,
+    CleaningUp,
+    Complete,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum JourneyStepState {
+    #[default]
+    Planned,
+    Waiting,
+    Complete,
+    Skipped,
+    Blocked,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct JourneyCounters {
+    pub(crate) scopes: usize,
+    pub(crate) adapter_statuses: usize,
+    pub(crate) adapter_receipts: usize,
+    pub(crate) adapter_errors: usize,
+    pub(crate) observations: usize,
+    pub(crate) laboratory_statuses: usize,
+    pub(crate) laboratory_receipts: usize,
+    pub(crate) laboratory_errors: usize,
+    pub(crate) reports: usize,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct JourneyStep {
+    pub(crate) id: String,
+    pub(crate) label: String,
+    pub(crate) command: String,
+    pub(crate) state: JourneyStepState,
+    #[serde(default)]
+    pub(crate) laboratory_alias: Option<String>,
+    #[serde(default)]
+    pub(crate) baseline: JourneyCounters,
+    #[serde(default)]
+    pub(crate) detail: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct JourneyLaboratory {
+    pub(crate) alias: String,
+    pub(crate) laboratory_id: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct JourneyState {
+    pub(crate) schema: u16,
+    pub(crate) stage: JourneyStage,
+    pub(crate) source_snapshot: String,
+    pub(crate) cursor: usize,
+    pub(crate) steps: Vec<JourneyStep>,
+    pub(crate) laboratories: Vec<JourneyLaboratory>,
+    pub(crate) steering: Vec<String>,
+    pub(crate) failures: Vec<String>,
+}
+
+impl Default for JourneyState {
+    fn default() -> Self {
+        Self {
+            schema: 1,
+            stage: JourneyStage::Inactive,
+            source_snapshot: String::new(),
+            cursor: 0,
+            steps: Vec::new(),
+            laboratories: Vec::new(),
+            steering: Vec::new(),
+            failures: Vec::new(),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
@@ -151,6 +314,22 @@ pub(crate) struct InventoryRecord {
     pub(crate) threat_boundaries: Vec<String>,
     pub(crate) routes: Vec<FamilyRoute>,
     pub(crate) source_observations: Vec<RecordId>,
+    #[serde(default)]
+    pub(crate) profiles: Vec<RecordId>,
+    #[serde(default)]
+    pub(crate) components: Vec<RecordId>,
+    #[serde(default)]
+    pub(crate) surface_records: Vec<RecordId>,
+    #[serde(default)]
+    pub(crate) boundary_records: Vec<RecordId>,
+    #[serde(default)]
+    pub(crate) identity_configurations: Vec<RecordId>,
+    #[serde(default)]
+    pub(crate) security_properties: Vec<RecordId>,
+    #[serde(default)]
+    pub(crate) methods: Vec<RecordId>,
+    #[serde(default)]
+    pub(crate) coverage_cells: Vec<RecordId>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -160,6 +339,12 @@ pub(crate) struct FamilyRoute {
     pub(crate) state: CoverageState,
     pub(crate) reason: String,
     pub(crate) surfaces: Vec<String>,
+    #[serde(default)]
+    pub(crate) identities: Vec<String>,
+    #[serde(default)]
+    pub(crate) properties: Vec<String>,
+    #[serde(default)]
+    pub(crate) methods: Vec<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -283,6 +468,54 @@ pub(crate) struct SourceObservation {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub(crate) enum PendingRequest {
+    AdapterCatalog {
+        key: String,
+        install_after: bool,
+        complete_after: bool,
+        #[serde(default)]
+        adapter_id: Option<String>,
+    },
+    AdapterPrepare {
+        key: String,
+        request: ModuleAdapterPrepareRequest,
+        complete_after: bool,
+    },
+    AdapterComplete {
+        key: String,
+        request: ModuleAdapterCompleteRequest,
+    },
+    AdapterCancel {
+        key: String,
+        request: ModuleAdapterCancelRequest,
+    },
+    AdapterStatus {
+        key: String,
+        request: ModuleAdapterStatusRequest,
+    },
+    AdapterRemove {
+        key: String,
+        request: ModuleAdapterRemoveRequest,
+    },
+    AdapterExecute {
+        key: String,
+        request: ModuleAdapterExecuteRequest,
+    },
+    LaboratoryCatalog {
+        key: String,
+    },
+    LaboratoryCreate {
+        key: String,
+        request: ModuleLaboratoryCreateRequest,
+    },
+    LaboratoryLifecycle {
+        key: String,
+        operation: String,
+        request: ModuleLaboratoryLifecycleRequest,
+    },
+    LaboratoryInvoke {
+        key: String,
+        request: ModuleLaboratoryInvokeRequest,
+    },
     Capture {
         key: String,
         exclusions: Vec<String>,
@@ -336,7 +569,18 @@ const fn default_manifest_entries() -> u16 {
 impl PendingRequest {
     pub(crate) fn key(&self) -> &str {
         match self {
-            Self::Capture { key, .. }
+            Self::AdapterCatalog { key, .. }
+            | Self::AdapterPrepare { key, .. }
+            | Self::AdapterComplete { key, .. }
+            | Self::AdapterCancel { key, .. }
+            | Self::AdapterStatus { key, .. }
+            | Self::AdapterRemove { key, .. }
+            | Self::AdapterExecute { key, .. }
+            | Self::LaboratoryCatalog { key }
+            | Self::LaboratoryCreate { key, .. }
+            | Self::LaboratoryLifecycle { key, .. }
+            | Self::LaboratoryInvoke { key, .. }
+            | Self::Capture { key, .. }
             | Self::Manifest { key, .. }
             | Self::Read { key, .. }
             | Self::Revoke { key, .. }
@@ -369,6 +613,39 @@ impl Default for State {
             scopes: Vec::new(),
             snapshots: Vec::new(),
             coverage: Vec::new(),
+            target_profiles: Vec::new(),
+            application_components: Vec::new(),
+            application_surfaces: Vec::new(),
+            trust_boundaries: Vec::new(),
+            identity_configurations: Vec::new(),
+            security_properties: Vec::new(),
+            methods: Vec::new(),
+            coverage_cells: Vec::new(),
+            adapter_catalog: None,
+            adapter_preparation: None,
+            adapter_statuses: Vec::new(),
+            adapter_receipts: Vec::new(),
+            adapter_errors: Vec::new(),
+            analysis_observations: Vec::new(),
+            analysis_evidence: Vec::new(),
+            api_observations: Vec::new(),
+            api_evidence: Vec::new(),
+            browser_observations: Vec::new(),
+            browser_evidence: Vec::new(),
+            identity_observations: Vec::new(),
+            identity_evidence: Vec::new(),
+            file_fuzz_observations: Vec::new(),
+            file_fuzz_evidence: Vec::new(),
+            workflow_observations: Vec::new(),
+            workflow_evidence: Vec::new(),
+            boundary_observations: Vec::new(),
+            boundary_evidence: Vec::new(),
+            attack_graph_observations: Vec::new(),
+            attack_graph_evidence: Vec::new(),
+            laboratory_catalog: None,
+            laboratory_statuses: Vec::new(),
+            laboratory_receipts: Vec::new(),
+            laboratory_errors: Vec::new(),
             hypotheses: Vec::new(),
             observations: Vec::new(),
             jobs: Vec::new(),
@@ -383,6 +660,7 @@ impl Default for State {
             investigation: InvestigationState::default(),
             repair: RepairState::default(),
             original_verification: None,
+            journey: JourneyState::default(),
         }
     }
 }
@@ -432,6 +710,15 @@ impl State {
                 "bounded_source_read".into(),
                 "credential_free_dependency_preparation".into(),
                 "contained_canary_disclosure_proof".into(),
+                "allowlisted_managed_adapter_runtime".into(),
+                "bounded_immutable_source_analysis".into(),
+                "host_owned_disposable_application_laboratory".into(),
+                "host_captured_http_api_campaign".into(),
+                "host_captured_isolated_browser_campaign".into(),
+                "host_private_identity_and_access_campaign".into(),
+                "host_owned_file_archive_parser_and_native_fault_campaign".into(),
+                "host_owned_private_network_tls_policy_and_authority_campaign".into(),
+                "host_owned_cross_adapter_attack_graph_and_copy_repair".into(),
             ],
             exclusions: handle.exclusions.clone(),
             supersedes: prior_scope,
@@ -464,45 +751,73 @@ impl State {
                 observation.record.dependencies = vec![snapshot_id.clone()];
             }
         }
+        let retained_inventory = self.investigation.inventory.clone();
+        let retained_graph = !self.coverage_cells.is_empty();
         self.scopes.push(scope);
         self.snapshots.push(snapshot);
         self.campaign.scope_revision = Some(scope_id.clone());
         self.campaign.source_snapshot = Some(snapshot_id);
         self.campaign.state = CampaignState::Active;
+        crate::coverage::initialize_methods(self);
+        if retained_graph {
+            crate::coverage::refresh_scope(
+                self,
+                &scope_id,
+                &handle.snapshot_digest,
+                &handle.changed_paths,
+                &handle.removed_paths,
+            );
+        }
         self.investigation = InvestigationState::default();
+        if retained_graph {
+            self.investigation.inventory = retained_inventory;
+            self.investigation.stage = InvestigationStage::Inventory;
+            self.investigation.feedback = "The prior target graph was retained. Recompile the bounded inventory against the refreshed manifest; only cells whose source dependencies changed were invalidated.".into();
+        }
         self.repair = RepairState::default();
         self.original_verification = None;
-        self.coverage = security_families()
-            .into_iter()
-            .enumerate()
-            .map(|(index, family)| CoverageRecord {
-                schema: RECORD_SCHEMA_VERSION,
-                id: RecordId::new(
-                    RecordKind::Coverage,
-                    format!("coverage-{}-{index}", &handle.snapshot_digest[..12]),
-                )
-                .expect("generated coverage identity"),
-                campaign: self.campaign.id.clone(),
-                scope_revision: scope_id.clone(),
-                family: family.into(),
-                surface: "whole_application".into(),
-                state: CoverageState::Unexamined,
-                reason: "The source boundary is retained; broad investigation has not begun."
-                    .into(),
-                evidence: Vec::new(),
-                supersedes: None,
-            })
-            .collect();
+        self.journey = JourneyState::default();
+        if !retained_graph {
+            self.coverage = security_families()
+                .into_iter()
+                .enumerate()
+                .map(|(index, family)| CoverageRecord {
+                    schema: RECORD_SCHEMA_VERSION,
+                    id: RecordId::new(
+                        RecordKind::Coverage,
+                        format!("coverage-{}-{index}", &handle.snapshot_digest[..12]),
+                    )
+                    .expect("generated coverage identity"),
+                    campaign: self.campaign.id.clone(),
+                    scope_revision: scope_id.clone(),
+                    family: family.into(),
+                    surface: "whole_application".into(),
+                    state: CoverageState::Unexamined,
+                    reason: "The source boundary is retained; broad investigation has not begun."
+                        .into(),
+                    evidence: Vec::new(),
+                    supersedes: None,
+                })
+                .collect();
+        }
         Ok(())
     }
 }
 
 pub(crate) fn load(parameters: &serde_json::Value) -> Result<State, Error> {
     let path = state_path(parameters)?;
-    let mut state = match fs::read(&path) {
-        Ok(bytes) => serde_json::from_slice(&bytes)?,
+    let (mut state, migrated) = match fs::read(&path) {
+        Ok(bytes) => {
+            let state = serde_json::from_slice(&bytes).map_err(|error| {
+                invalid(format!(
+                    "durable Red Team state is unreadable ({error}); the original bytes remain unchanged at {}. Restore or inspect that file before retrying; no empty campaign was substituted",
+                    path.display()
+                ))
+            })?;
+            (state, false)
+        }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            migrate_phase_five(parameters)?
+            (migrate_phase_nineteen(parameters)?, true)
         }
         Err(error) => return Err(error.into()),
     };
@@ -513,6 +828,12 @@ pub(crate) fn load(parameters: &serde_json::Value) -> Result<State, Error> {
         )));
     }
     state.module_version = env!("CARGO_PKG_VERSION").into();
+    if state.active_snapshot().is_some() {
+        crate::coverage::initialize_methods(&mut state);
+    }
+    if migrated {
+        publish(&path, &state)?;
+    }
     Ok(state)
 }
 
@@ -541,7 +862,243 @@ pub(crate) fn publish(path: &Path, value: &impl Serialize) -> Result<(), Error> 
 }
 
 fn state_path(parameters: &serde_json::Value) -> Result<PathBuf, Error> {
-    Ok(private_root(parameters)?.join("red-team-state-v6.json"))
+    Ok(private_root(parameters)?.join("red-team-state-v18.json"))
+}
+
+fn migrate_phase_nineteen(parameters: &serde_json::Value) -> Result<State, Error> {
+    let legacy = private_root(parameters)?.join("red-team-state-v17.json");
+    match fs::read(legacy) {
+        Ok(bytes) => {
+            let mut state: State = serde_json::from_slice(&bytes)?;
+            if state.schema != 17 || state.phase != 19 {
+                return Err(invalid("unsupported Red Team Phase 19 state"));
+            }
+            state.schema = STATE_SCHEMA;
+            state.phase = PHASE;
+            state.module_version = env!("CARGO_PKG_VERSION").into();
+            Ok(state)
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            migrate_phase_eighteen(parameters)
+        }
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn migrate_phase_eighteen(parameters: &serde_json::Value) -> Result<State, Error> {
+    let legacy = private_root(parameters)?.join("red-team-state-v16.json");
+    match fs::read(legacy) {
+        Ok(bytes) => {
+            let mut state: State = serde_json::from_slice(&bytes)?;
+            if state.schema != 16 || state.phase != 18 {
+                return Err(invalid("unsupported Red Team Phase 18 state"));
+            }
+            state.schema = STATE_SCHEMA;
+            state.phase = PHASE;
+            state.module_version = env!("CARGO_PKG_VERSION").into();
+            Ok(state)
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            migrate_phase_seventeen(parameters)
+        }
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn migrate_phase_seventeen(parameters: &serde_json::Value) -> Result<State, Error> {
+    let legacy = private_root(parameters)?.join("red-team-state-v15.json");
+    match fs::read(legacy) {
+        Ok(bytes) => {
+            let mut state: State = serde_json::from_slice(&bytes)?;
+            if state.schema != 15 || state.phase != 17 {
+                return Err(invalid("unsupported Red Team Phase 17 state"));
+            }
+            state.schema = STATE_SCHEMA;
+            state.phase = PHASE;
+            state.module_version = env!("CARGO_PKG_VERSION").into();
+            Ok(state)
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            migrate_phase_sixteen(parameters)
+        }
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn migrate_phase_sixteen(parameters: &serde_json::Value) -> Result<State, Error> {
+    let legacy = private_root(parameters)?.join("red-team-state-v14.json");
+    match fs::read(legacy) {
+        Ok(bytes) => {
+            let mut state: State = serde_json::from_slice(&bytes)?;
+            if state.schema != 14 || state.phase != 16 {
+                return Err(invalid("unsupported Red Team Phase 16 state"));
+            }
+            state.schema = STATE_SCHEMA;
+            state.phase = PHASE;
+            state.module_version = env!("CARGO_PKG_VERSION").into();
+            Ok(state)
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            migrate_phase_fifteen(parameters)
+        }
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn migrate_phase_fifteen(parameters: &serde_json::Value) -> Result<State, Error> {
+    let legacy = private_root(parameters)?.join("red-team-state-v13.json");
+    match fs::read(legacy) {
+        Ok(bytes) => {
+            let mut state: State = serde_json::from_slice(&bytes)?;
+            if state.schema != 13 || state.phase != 15 {
+                return Err(invalid("unsupported Red Team Phase 15 state"));
+            }
+            state.schema = STATE_SCHEMA;
+            state.phase = PHASE;
+            state.module_version = env!("CARGO_PKG_VERSION").into();
+            Ok(state)
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            migrate_phase_fourteen(parameters)
+        }
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn migrate_phase_fourteen(parameters: &serde_json::Value) -> Result<State, Error> {
+    let legacy = private_root(parameters)?.join("red-team-state-v12.json");
+    match fs::read(legacy) {
+        Ok(bytes) => {
+            let mut state: State = serde_json::from_slice(&bytes)?;
+            if state.schema != 12 || state.phase != 14 {
+                return Err(invalid("unsupported Red Team Phase 14 state"));
+            }
+            state.schema = STATE_SCHEMA;
+            state.phase = PHASE;
+            state.module_version = env!("CARGO_PKG_VERSION").into();
+            Ok(state)
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            migrate_phase_thirteen(parameters)
+        }
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn migrate_phase_thirteen(parameters: &serde_json::Value) -> Result<State, Error> {
+    let legacy = private_root(parameters)?.join("red-team-state-v11.json");
+    match fs::read(legacy) {
+        Ok(bytes) => {
+            let mut state: State = serde_json::from_slice(&bytes)?;
+            if state.schema != 11 || state.phase != 13 {
+                return Err(invalid("unsupported Red Team Phase 13 state"));
+            }
+            state.schema = STATE_SCHEMA;
+            state.phase = PHASE;
+            state.module_version = env!("CARGO_PKG_VERSION").into();
+            Ok(state)
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            migrate_phase_twelve(parameters)
+        }
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn migrate_phase_twelve(parameters: &serde_json::Value) -> Result<State, Error> {
+    let legacy = private_root(parameters)?.join("red-team-state-v10.json");
+    match fs::read(legacy) {
+        Ok(bytes) => {
+            let mut state: State = serde_json::from_slice(&bytes)?;
+            if state.schema != 10 || state.phase != 12 {
+                return Err(invalid("unsupported Red Team Phase 12 state"));
+            }
+            state.schema = STATE_SCHEMA;
+            state.phase = PHASE;
+            state.module_version = env!("CARGO_PKG_VERSION").into();
+            Ok(state)
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            migrate_phase_eleven(parameters)
+        }
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn migrate_phase_eleven(parameters: &serde_json::Value) -> Result<State, Error> {
+    let legacy = private_root(parameters)?.join("red-team-state-v9.json");
+    match fs::read(legacy) {
+        Ok(bytes) => {
+            let mut state: State = serde_json::from_slice(&bytes)?;
+            if state.schema != 9 || state.phase != 11 {
+                return Err(invalid("unsupported Red Team Phase 11 state"));
+            }
+            state.schema = STATE_SCHEMA;
+            state.phase = PHASE;
+            state.module_version = env!("CARGO_PKG_VERSION").into();
+            Ok(state)
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => migrate_phase_ten(parameters),
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn migrate_phase_ten(parameters: &serde_json::Value) -> Result<State, Error> {
+    let legacy = private_root(parameters)?.join("red-team-state-v8.json");
+    match fs::read(legacy) {
+        Ok(bytes) => {
+            let mut state: State = serde_json::from_slice(&bytes)?;
+            if state.schema != 8 || state.phase != 10 {
+                return Err(invalid("unsupported Red Team Phase 10 state"));
+            }
+            state.schema = STATE_SCHEMA;
+            state.phase = PHASE;
+            state.module_version = env!("CARGO_PKG_VERSION").into();
+            Ok(state)
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            migrate_phase_nine(parameters)
+        }
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn migrate_phase_nine(parameters: &serde_json::Value) -> Result<State, Error> {
+    let legacy = private_root(parameters)?.join("red-team-state-v7.json");
+    match fs::read(legacy) {
+        Ok(bytes) => {
+            let mut state: State = serde_json::from_slice(&bytes)?;
+            if state.schema != 7 || state.phase != 9 {
+                return Err(invalid("unsupported Red Team Phase 9 state"));
+            }
+            state.schema = STATE_SCHEMA;
+            state.phase = PHASE;
+            state.module_version = env!("CARGO_PKG_VERSION").into();
+            Ok(state)
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => migrate_phase_six(parameters),
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn migrate_phase_six(parameters: &serde_json::Value) -> Result<State, Error> {
+    let legacy = private_root(parameters)?.join("red-team-state-v6.json");
+    match fs::read(legacy) {
+        Ok(bytes) => {
+            let mut state: State = serde_json::from_slice(&bytes)?;
+            if state.schema != 6 || state.phase != 6 {
+                return Err(invalid("unsupported Red Team Phase 6 state"));
+            }
+            state.schema = STATE_SCHEMA;
+            state.phase = PHASE;
+            state.module_version = env!("CARGO_PKG_VERSION").into();
+            Ok(state)
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            migrate_phase_five(parameters)
+        }
+        Err(error) => Err(error.into()),
+    }
 }
 
 fn migrate_phase_five(parameters: &serde_json::Value) -> Result<State, Error> {

@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Pod
+spec:
+  hostNetwork: true
+  containers:
+    - name: service
+      securityContext:
+        privileged: true

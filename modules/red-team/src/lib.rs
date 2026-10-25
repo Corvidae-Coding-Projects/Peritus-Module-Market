@@ -1,12 +1,25 @@
 //! Hardened Red Team coordinator: investigation, copy-only repair, replay, and delivery.
 
+mod adapter;
+mod attack_graph;
+mod boundary_authority;
+mod browser_client;
+mod coverage;
+mod file_fuzz;
+mod http_api;
+mod identity_access;
 mod investigation;
+mod journey;
+mod laboratory;
 pub mod records;
 mod repair;
 mod report;
+mod source_analysis;
 mod state;
+mod workflow_state;
 
 use peritus_plugin_sdk::{
+    HOST_CAPABILITY_ADAPTER_RUNTIME, HOST_CAPABILITY_APPLICATION_LABORATORY,
     HOST_CAPABILITY_CHECKPOINT, HOST_CAPABILITY_OWNED_JOBS, HOST_CAPABILITY_PRIVATE_STATE,
     HOST_CAPABILITY_PROFILE, HOST_CAPABILITY_SCOPED_SOURCE, MODULE_HOST_CONTRACT_VERSION,
     ModuleAction, ModuleAttachment, ModuleHostOutcome, ModuleHostProfile, ModuleHostRequest,
@@ -24,8 +37,8 @@ use serde_json::{Value, json};
 use sha2::{Digest as _, Sha256};
 use state::{ObservationState, PendingRequest, SkeletonCheckpoint, SourceObservation, State};
 
-const CHECKPOINT_KEY: &str = "red-team-phase-6-repair-v1";
-const COMPATIBILITY_KEY: &str = "red-team-phase-6-host-profile";
+const CHECKPOINT_KEY: &str = "red-team-phase-20-complete-journey-v1";
+const COMPATIBILITY_KEY: &str = "red-team-phase-20-host-profile";
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -81,6 +94,9 @@ fn command(parameters: &Value) -> Result<ModuleAction, Error> {
         return checkpoint(parameters, &host);
     }
     let mut state = state::load(parameters)?;
+    if journey::handles(command) {
+        return journey::command(parameters, &host, &mut state, command);
+    }
     if command == "pause" {
         return investigation::pause(parameters, &mut state);
     }
@@ -103,11 +119,33 @@ fn command(parameters: &Value) -> Result<ModuleAction, Error> {
     if command == "start" {
         return investigation::start(parameters, &host, &mut state);
     }
+    if source_analysis::handles(command)
+        || http_api::handles(command)
+        || browser_client::handles(command)
+        || identity_access::handles(command)
+        || file_fuzz::handles(command)
+        || workflow_state::handles(command)
+        || boundary_authority::handles(command)
+        || attack_graph::handles(command)
+        || adapter::handles(command)
+        || laboratory::handles(command)
+    {
+        return route_component_command(parameters, &host, &mut state, command);
+    }
     if command.is_empty() || matches!(command, "status" | "resume") {
         return Ok(reply(status(&state), &host, actions(&state), None));
     }
     if command == "coverage" {
-        return Ok(reply(coverage(&state), &host, actions(&state), None));
+        return Ok(reply(coverage::coverage_view(&state), &host, actions(&state), None));
+    }
+    if command == "profiles" {
+        return Ok(reply(coverage::profiles_view(&state), &host, actions(&state), None));
+    }
+    if command == "surfaces" {
+        return Ok(reply(coverage::surfaces_view(&state), &host, actions(&state), None));
+    }
+    if command == "methods" {
+        return Ok(reply(coverage::methods_view(&state), &host, actions(&state), None));
     }
     if command == "findings" {
         return Ok(reply(findings(&state), &host, actions(&state), None));
@@ -115,16 +153,8 @@ fn command(parameters: &Value) -> Result<ModuleAction, Error> {
     if command == "patches" {
         return Ok(reply(patches(&state), &host, actions(&state), None));
     }
-    if matches!(command, "report" | "report-json" | "bundle") {
-        let attachment =
-            report::publish_report(&state::private_root(parameters)?, &mut state, command)?;
-        state::save(parameters, &state)?;
-        return Ok(reply(
-            "The current bounded delivery was published from retained source observations, findings, host-authored original and patched replay receipts, exact diffs, independent reviews, and the original-workspace comparison. Pending work and every unexamined family remain explicit gaps.",
-            &host,
-            actions(&state),
-            Some(attachment),
-        ));
+    if matches!(command, "report" | "report-json" | "sarif" | "bundle") {
+        return route_component_command(parameters, &host, &mut state, command);
     }
     if command == "scope" || command.starts_with("scope exclude ") {
         return scope(parameters, &host, &mut state, command);
@@ -160,11 +190,60 @@ fn command(parameters: &Value) -> Result<ModuleAction, Error> {
         return cancel_job(parameters, &host, &mut state, command);
     }
     Ok(reply(
-        "Unknown Red Team command. Use start, status, pause, resume, steer DETAILS, scope, refresh, manifest, observe PATH [offset=N] [bytes=N], prepare HTTPS_URL sha256=DIGEST [bytes=N], probe PATH [input=LITERAL], jobs, job ID, job-log ID STREAM [offset=N] [bytes=N], job-cancel ID, coverage, findings, patches, report, report-json, bundle, revoke, compatibility, contract, or checkpoint.",
+        "Unknown Red Team command. Use campaign-plan, campaign-start, campaign, campaign-next, campaign-pause, campaign-resume, campaign-steer DETAILS, campaign-retry, campaign-skip, campaign-abort, start, status, pause, resume, steer DETAILS, scope, refresh, profiles, surfaces, methods, coverage, analyzers, analyzer-install, analyze, analysis-history, analyzer-status, analyzer-remove, api, api-install, api-run, api-history, api-status, api-remove, browser, browser-install, browser-run, browser-history, browser-status, browser-remove, identity, identity-install, identity-run, identity-history, file-fuzz, file-fuzz-install, file-fuzz-run, file-fuzz-history, file-fuzz-status, file-fuzz-remove, workflow, workflow-install, workflow-run, workflow-history, workflow-status, workflow-remove, boundary, boundary-install, boundary-run, boundary-history, boundary-status, boundary-remove, graph, graph-install, graph-run, graph-history, graph-status, graph-remove, laboratories, lab-create fixture, lab-create http-vulnerable, lab-create http-safe, lab-create identity-vulnerable, lab-create identity-safe, lab-create file-vulnerable, lab-create file-safe, lab-create workflow-vulnerable, lab-create workflow-safe, lab-create boundary-vulnerable, lab-create boundary-safe, lab-prepare, lab-launch, lab-status, lab-select VALUE, lab-use VALUE, lab-snapshot, lab-reset, lab-stop, lab-teardown, adapters, adapter-install diagnostic, adapter-stage diagnostic, adapter-complete, adapter-cancel, adapter-status, adapter-run MESSAGE, adapter-remove, manifest, observe PATH [offset=N] [bytes=N], prepare HTTPS_URL sha256=DIGEST [bytes=N], probe PATH [input=LITERAL], jobs, job ID, job-log ID STREAM [offset=N] [bytes=N], job-cancel ID, findings, patches, report, report-json, sarif, bundle, revoke, compatibility, contract, or checkpoint.",
         &host,
         actions(&state),
         None,
     ))
+}
+
+fn route_component_command(
+    parameters: &Value,
+    host: &Option<ModuleHostProfile>,
+    state: &mut State,
+    command: &str,
+) -> Result<ModuleAction, Error> {
+    if source_analysis::handles(command) {
+        return source_analysis::command(parameters, host, state, command);
+    }
+    if http_api::handles(command) {
+        return http_api::command(parameters, host, state, command);
+    }
+    if browser_client::handles(command) {
+        return browser_client::command(parameters, host, state, command);
+    }
+    if identity_access::handles(command) {
+        return identity_access::command(parameters, host, state, command);
+    }
+    if file_fuzz::handles(command) {
+        return file_fuzz::command(parameters, host, state, command);
+    }
+    if workflow_state::handles(command) {
+        return workflow_state::command(parameters, host, state, command);
+    }
+    if boundary_authority::handles(command) {
+        return boundary_authority::command(parameters, host, state, command);
+    }
+    if attack_graph::handles(command) {
+        return attack_graph::command(parameters, host, state, command);
+    }
+    if adapter::handles(command) {
+        return adapter::command(parameters, host, state, command);
+    }
+    if laboratory::handles(command) {
+        return laboratory::command(parameters, host, state, command);
+    }
+    if matches!(command, "report" | "report-json" | "sarif" | "bundle") {
+        let attachment = report::publish_report(&state::private_root(parameters)?, state, command)?;
+        state::save(parameters, state)?;
+        return Ok(reply(
+            "The current bounded delivery was published from retained source observations, findings, host-authored original and patched replay receipts, exact diffs, independent reviews, and the original-workspace comparison. Pending work and every unexamined family remain explicit gaps.",
+            host,
+            actions(state),
+            Some(attachment),
+        ));
+    }
+    Err(invalid(format!("campaign step uses unsupported command `{command}`")))
 }
 
 fn submit_preparation(
@@ -509,6 +588,61 @@ fn revoke(
 
 pub(crate) fn resume_pending(pending: &PendingRequest) -> Result<ModuleAction, Error> {
     let (capability, operation, input) = match pending {
+        PendingRequest::AdapterCatalog { .. } => (
+            HOST_CAPABILITY_ADAPTER_RUNTIME,
+            "catalog",
+            json!({}),
+        ),
+        PendingRequest::AdapterPrepare { request, .. } => (
+            HOST_CAPABILITY_ADAPTER_RUNTIME,
+            "prepare",
+            serde_json::to_value(request)?,
+        ),
+        PendingRequest::AdapterComplete { request, .. } => (
+            HOST_CAPABILITY_ADAPTER_RUNTIME,
+            "complete",
+            serde_json::to_value(request)?,
+        ),
+        PendingRequest::AdapterCancel { request, .. } => (
+            HOST_CAPABILITY_ADAPTER_RUNTIME,
+            "cancel",
+            serde_json::to_value(request)?,
+        ),
+        PendingRequest::AdapterStatus { request, .. } => (
+            HOST_CAPABILITY_ADAPTER_RUNTIME,
+            "status",
+            serde_json::to_value(request)?,
+        ),
+        PendingRequest::AdapterRemove { request, .. } => (
+            HOST_CAPABILITY_ADAPTER_RUNTIME,
+            "remove",
+            serde_json::to_value(request)?,
+        ),
+        PendingRequest::AdapterExecute { request, .. } => (
+            HOST_CAPABILITY_ADAPTER_RUNTIME,
+            "execute",
+            serde_json::to_value(request)?,
+        ),
+        PendingRequest::LaboratoryCatalog { .. } => (
+            HOST_CAPABILITY_APPLICATION_LABORATORY,
+            "catalog",
+            json!({}),
+        ),
+        PendingRequest::LaboratoryCreate { request, .. } => (
+            HOST_CAPABILITY_APPLICATION_LABORATORY,
+            "create",
+            serde_json::to_value(request)?,
+        ),
+        PendingRequest::LaboratoryLifecycle { operation, request, .. } => (
+            HOST_CAPABILITY_APPLICATION_LABORATORY,
+            operation.as_str(),
+            serde_json::to_value(request)?,
+        ),
+        PendingRequest::LaboratoryInvoke { request, .. } => (
+            HOST_CAPABILITY_APPLICATION_LABORATORY,
+            "invoke",
+            serde_json::to_value(request)?,
+        ),
         PendingRequest::Capture { exclusions, refresh, .. } => (
             HOST_CAPABILITY_SCOPED_SOURCE,
             "capture",
@@ -618,6 +752,12 @@ fn host_result(parameters: &Value) -> Result<ModuleAction, Error> {
         ModuleHostOutcome::Success { output } => output,
         ModuleHostOutcome::Unsupported { detail } => {
             state.pending = None;
+            if expected_capability == HOST_CAPABILITY_ADAPTER_RUNTIME {
+                state.adapter_errors.push(format!("unsupported: {detail}"));
+            }
+            if expected_capability == HOST_CAPABILITY_APPLICATION_LABORATORY {
+                state.laboratory_errors.push(format!("unsupported: {detail}"));
+            }
             if result.key.starts_with("red-team-repair-") {
                 repair::host_failure(&mut state, &detail);
                 state::save(parameters, &state)?;
@@ -640,6 +780,12 @@ fn host_result(parameters: &Value) -> Result<ModuleAction, Error> {
         }
         ModuleHostOutcome::Rejected { code, detail } => {
             state.pending = None;
+            if expected_capability == HOST_CAPABILITY_ADAPTER_RUNTIME {
+                state.adapter_errors.push(format!("{code}: {detail}"));
+            }
+            if expected_capability == HOST_CAPABILITY_APPLICATION_LABORATORY {
+                state.laboratory_errors.push(format!("{code}: {detail}"));
+            }
             if result.key.starts_with("red-team-repair-") {
                 repair::host_failure(&mut state, &format!("host rejection {code}: {detail}"));
                 state::save(parameters, &state)?;
@@ -666,6 +812,12 @@ fn host_result(parameters: &Value) -> Result<ModuleAction, Error> {
         }
         ModuleHostOutcome::Failed { code, detail, retryable_with_new_action } => {
             state.pending = None;
+            if expected_capability == HOST_CAPABILITY_ADAPTER_RUNTIME {
+                state.adapter_errors.push(format!("{code}: {detail}"));
+            }
+            if expected_capability == HOST_CAPABILITY_APPLICATION_LABORATORY {
+                state.laboratory_errors.push(format!("{code}: {detail}"));
+            }
             if result.key.starts_with("red-team-repair-") {
                 repair::host_failure(
                     &mut state,
@@ -698,7 +850,30 @@ fn host_result(parameters: &Value) -> Result<ModuleAction, Error> {
             ));
         }
     };
+    if expected_capability == HOST_CAPABILITY_ADAPTER_RUNTIME {
+        return adapter::admit(parameters, &host, &mut state, pending, output);
+    }
+    if expected_capability == HOST_CAPABILITY_APPLICATION_LABORATORY {
+        return laboratory::admit(parameters, &host, &mut state, pending, output);
+    }
     let text = match pending {
+        PendingRequest::AdapterCatalog { .. }
+        | PendingRequest::AdapterPrepare { .. }
+        | PendingRequest::AdapterComplete { .. }
+        | PendingRequest::AdapterCancel { .. }
+        | PendingRequest::AdapterStatus { .. }
+        | PendingRequest::AdapterRemove { .. }
+        | PendingRequest::AdapterExecute { .. } => {
+            return Err(invalid("adapter host result was routed through a non-adapter capability"));
+        }
+        PendingRequest::LaboratoryCatalog { .. }
+        | PendingRequest::LaboratoryCreate { .. }
+        | PendingRequest::LaboratoryLifecycle { .. }
+        | PendingRequest::LaboratoryInvoke { .. } => {
+            return Err(invalid(
+                "laboratory host result was routed through a non-laboratory capability",
+            ));
+        }
         PendingRequest::Capture { .. } => {
             let handle: ScopedSourceHandle = serde_json::from_value(output)?;
             state.admit_scope(&handle)?;
@@ -873,6 +1048,17 @@ fn host_result(parameters: &Value) -> Result<ModuleAction, Error> {
 
 fn pending_capability(pending: &PendingRequest) -> &'static str {
     match pending {
+        PendingRequest::AdapterCatalog { .. }
+        | PendingRequest::AdapterPrepare { .. }
+        | PendingRequest::AdapterComplete { .. }
+        | PendingRequest::AdapterCancel { .. }
+        | PendingRequest::AdapterStatus { .. }
+        | PendingRequest::AdapterRemove { .. }
+        | PendingRequest::AdapterExecute { .. } => HOST_CAPABILITY_ADAPTER_RUNTIME,
+        PendingRequest::LaboratoryCatalog { .. }
+        | PendingRequest::LaboratoryCreate { .. }
+        | PendingRequest::LaboratoryLifecycle { .. }
+        | PendingRequest::LaboratoryInvoke { .. } => HOST_CAPABILITY_APPLICATION_LABORATORY,
         PendingRequest::Capture { .. }
         | PendingRequest::Manifest { .. }
         | PendingRequest::Read { .. }
@@ -1211,7 +1397,7 @@ fn checkpoint(
     state::save(parameters, &state)?;
     Ok(ModuleAction::Checkpoint {
         key: CHECKPOINT_KEY.into(),
-        text: "Red Team checkpoint was written to private module state. It retains exact source observations, findings, copy-only patch plans, replay receipts, independent reviews, original-byte proof, reuse measurements, and explicit gaps.".into(),
+        text: "Red Team checkpoint was written to private module state. It retains exact source observations, pinned static-analysis leads, host-captured class-specific receipts, cross-adapter graph edges and counterfactuals, laboratory identities/status/receipts, copy-only patches, adapter replay receipts, independent reviews, original-byte proof, reuse measurements, and explicit gaps.".into(),
         actions: actions(&state),
     })
 }
@@ -1252,18 +1438,57 @@ fn status(state: &State) -> String {
         .filter(|job| matches!(job.state, records::JobState::Queued | records::JobState::Running))
         .count();
     format!(
-        "# Red Team investigation and repair\n\n- Module: `peritus.red-team` {}\n- Durable schema: v{}\n- Campaign state: `{:?}`\n- Investigation stage: `{:?}`\n- Repair stage: `{:?}`\n- Paused: {}\n- Scope revision: `{}`\n- Source snapshot: `{}`\n- Manifest artifact: `{}`\n- Current source observations: {}\n- Invalidated source observations: {}\n- Retained hypotheses: {}\n- Retained probes: {}\n- Retained host-owned jobs: {}\n- Active host-owned jobs: {}\n- Trusted job receipts: {}\n- Skeptically adjudicated findings: {}\n- Patch revisions: {}\n- Patch replay receipts: {}\n- Original workspace unchanged: {}\n- Security families unexamined: {}\n- Reused exact source reads: {}\n- Foundation checkpoint: {}\n\nThe source handle is revocable. Every model role receives the canonical skill directly. The Rust coordinator alone admits source observations, host-authored original and patched execution receipts, classifications, patch states, and before/after proof; unsuccessful attempts do not establish safety.",
+        "# Red Team investigation and repair\n\n- Module: `peritus.red-team` {}\n- Durable schema: v{}\n- Campaign state: `{:?}`\n- Investigation stage: `{:?}`\n- Repair stage: `{:?}`\n- Complete-journey stage: `{:?}`\n- Complete-journey progress: {}/{}\n- Complete-journey gaps/failures: {}\n- Paused: {}\n- Scope revision: `{}`\n- Source snapshot: `{}`\n- Manifest artifact: `{}`\n- Current source observations: {}\n- Invalidated source observations: {}\n- Target profiles: {}\n- Application surfaces: {}\n- Method-backed coverage cells: {}\n- Coverage cells examined: {}\n- Coverage cells blocked: {}\n- Managed adapter lifecycle observations: {}\n- Adapter execution receipts: {}\n- Static-analysis observations: {}\n- Static-analysis source evidence: {}\n- HTTP/API campaigns: {}\n- HTTP/API evidence records: {}\n- Browser campaigns: {}\n- Identity/access campaigns: {}\n- File/parser campaigns: {}\n- Workflow/state campaigns: {}\n- Boundary/authority campaigns: {}\n- Boundary/authority evidence records: {}\n- Attack-graph campaigns: {}\n- Attack-graph evidence records: {}\n- Retained adapter errors: {}\n- Laboratory lifecycle observations: {}\n- Laboratory operation receipts: {}\n- Retained laboratory errors: {}\n- Latest laboratory phase: `{}`\n- Retained hypotheses: {}\n- Retained probes: {}\n- Retained host-owned jobs: {}\n- Active host-owned jobs: {}\n- Trusted job receipts: {}\n- Skeptically adjudicated findings: {}\n- Patch revisions: {}\n- Patch replay receipts: {}\n- Original workspace unchanged: {}\n- Security families unexamined: {}\n- Reused exact source reads: {}\n- Foundation checkpoint: {}\n\nThe source handle is revocable. Managed adapters require exact registered descriptors, content identities, platforms, operations and host receipt decoders. Static analysis uses immutable source, pinned host rules and redacted source-only leads; it never establishes runtime exploitability. Runtime adapters can reach only ready opaque disposable-laboratory endpoints; the host captures protocol bytes, copied state, private peer effects, and explicit unavailable-platform gaps while denying ambient network, credentials, privilege, and host tools. Cross-adapter graph search admits only receipt-backed edges, preserves broken and rejected paths, and accepts copy-only repair only after exact source, HTTP, and real-browser replay. Application laboratories require copied immutable source, opaque handles, private host-owned isolation, real readiness, state readback, reset, process cleanup and original-source proof. The complete journey schedules only one host operation at a time; steering text and target output remain untrusted and cannot widen authority. Every model role receives the canonical skill directly. The Rust coordinator alone admits source observations, host-authored original and patched execution receipts, classifications, coverage transitions, patch states, and before/after proof; unsuccessful attempts do not establish safety.",
         state.module_version,
         state.schema,
         state.campaign.state,
         state.investigation.stage,
         state.repair.stage,
+        state.journey.stage,
+        state.journey.cursor,
+        state.journey.steps.len(),
+        state.journey.failures.len(),
         state.investigation.paused,
         scope.map_or("not selected", |record| record.id.value.as_str()),
         snapshot.map_or("not captured", |record| record.snapshot_digest.as_str()),
         snapshot.map_or("not captured", |record| record.manifest_artifact.as_str()),
         current,
         invalidated,
+        state.target_profiles.len(),
+        state.application_surfaces.len(),
+        state.coverage_cells.len(),
+        state
+            .coverage_cells
+            .iter()
+            .filter(|cell| cell.state == records::CoverageState::Examined)
+            .count(),
+        state
+            .coverage_cells
+            .iter()
+            .filter(|cell| cell.state == records::CoverageState::Blocked)
+            .count(),
+        state.adapter_statuses.len(),
+        state.adapter_receipts.len(),
+        state.analysis_observations.len(),
+        state.analysis_evidence.len(),
+        state.api_observations.len(),
+        state.api_evidence.len(),
+        state.browser_observations.len(),
+        state.identity_observations.len(),
+        state.file_fuzz_observations.len(),
+        state.workflow_observations.len(),
+        state.boundary_observations.len(),
+        state.boundary_evidence.len(),
+        state.attack_graph_observations.len(),
+        state.attack_graph_evidence.len(),
+        state.adapter_errors.len(),
+        state.laboratory_statuses.len(),
+        state.laboratory_receipts.len(),
+        state.laboratory_errors.len(),
+        state
+            .laboratory_statuses
+            .last()
+            .map_or_else(|| "not created".into(), |status| format!("{:?}", status.phase)),
         state.hypotheses.len(),
         state.investigation.probes.len(),
         state.jobs.len(),
@@ -1281,20 +1506,6 @@ fn status(state: &State) -> String {
         state.investigation.reuse.source_reads_reused,
         checkpoint,
     )
-}
-
-fn coverage(state: &State) -> String {
-    if state.coverage.is_empty() {
-        return "# Red Team coverage\n\nNo source scope exists, so no family-by-surface ledger has been created. This is an unexamined campaign, not a clean result.".into();
-    }
-    let mut text = "# Red Team coverage\n\n`Examined` would mean only that named methods ran; it would not mean secure.\n\n".to_owned();
-    for record in &state.coverage {
-        text.push_str(&format!(
-            "- `{}` / `{}` — `{:?}`: {}\n",
-            record.family, record.surface, record.state, record.reason
-        ));
-    }
-    text
 }
 
 fn findings(state: &State) -> String {
@@ -1363,7 +1574,7 @@ fn patches(state: &State) -> String {
 
 fn contract(profile: &Option<ModuleHostProfile>) -> Result<ModuleAction, Error> {
     Ok(reply(
-        "# Red Team host contract\n\nThe host binds source capture to the explicitly opened Peritus workspace, then admits only stable job adapters over an exact source handle and revision. The coordinator performs one bounded inventory, delivers the canonical skill to separately persisted discovery, skeptic, fixer, and patch-reviewer contexts, registers hypotheses before execution, and routes all effects through revocable scoped-source or host-owned job services. The host-generated canary and evaluator remain outside target control. For confirmed findings, a fixer may propose an exact-preimage replacement, but the host alone constructs the unified diff and materializes it in disposable private job storage. Attack, legitimate, malformed and adjacent cases must preserve declared positive behavior while the violation is absent. An independent reviewer sees the exact diff and raw receipts. Final verification rereads the selected original workspace against the starting path, byte, and executable-bit manifest. TUI and GUI consume the same exact-run actions, concrete progress, durable summaries and user-selected export identity. The module exports Markdown, JSON, exact patches and a replay bundle; it cannot edit, commit, push, deploy or disclose the original project.",
+        "# Red Team host contract\n\nThe host binds source capture to the explicitly opened Peritus workspace, then admits only stable job adapters over an exact source handle and revision. Managed adapter runtimes are additive: the host registry must match every descriptor, digest, platform, operation, schema and receipt decoder before private content-addressed installation or execution. The registered static-analysis adapter reads only immutable scoped-source artifacts under host-enforced file and byte bounds; it records exact analyzer, rule and advisory identities, redacts possible secrets, and can emit only source leads—not runtime-confirmed findings. Disposable application laboratories are also host-owned: the module may select an advertised recipe and exact source files, but only the host resolves copied paths, process plans, private service routing, endpoint handles, test identities and target-only secret material. The Linux recipes launch copied services with cleared environment, private filesystem, bounded descendants and resources, IP deny-all, private Unix sockets, host-side readiness and state oracles, snapshots, reset, cleanup and original-source verification. The registered HTTP/API adapter can address only an exact ready HTTP laboratory. The host emits and captures HTTP/1.1 and WebSocket bytes directly, imports the live OpenAPI document, observes copied state before and after requests, blocks target-only values from module output, and distinguishes ordinary success, rejected input, unreachable routes and independently confirmed violations. The boundary-authority adapter additionally creates private Unix-socket DNS, redirect, callback, proxy, and TLS peers plus lab-only certificates. Targets never receive routable peer addresses or host authority; public, LAN, loopback, cloud-provider, and host-privileged effects stay denied or explicitly blocked. The attack-graph adapter composes only raw host receipts from exact source, private HTTP, and an isolated browser; every edge names its evidence, a separate skeptic rejects unsupported edges, a counterfactual removes a prerequisite, and an independent repair reviewer accepts an exact copy-only diff only after all registered adapter replays pass with legitimate behavior preserved. No operation can name a host executable, ambient endpoint, container, credential, network policy or fallback. The coordinator performs one bounded inventory, delivers the canonical skill to separately persisted discovery, skeptic, fixer, and patch-reviewer contexts, registers hypotheses before execution, and routes all effects through revocable scoped-source or host-owned services. The host-generated canary and evaluator remain outside target control. For confirmed findings, a fixer may propose an exact-preimage replacement, but the host alone constructs the unified diff and materializes it in disposable private job storage. Attack, legitimate, malformed and adjacent cases must preserve declared positive behavior while the violation is absent. An independent reviewer sees the exact diff and raw receipts. Final verification rereads the selected original workspace against the starting path, byte, and executable-bit manifest. TUI and GUI consume the same exact-run actions, concrete progress, durable summaries and user-selected export identity. The module exports Markdown, JSON, exact patches and a replay bundle; it cannot edit, commit, push, deploy or disclose the original project.",
         profile,
         base_actions(),
         None,
@@ -1392,17 +1603,26 @@ fn compatibility_text(profile: &ModuleHostProfile) -> String {
         if profile.supports(HOST_CAPABILITY_SCOPED_SOURCE, 1) { "available" } else { "missing" };
     let jobs =
         if profile.supports(HOST_CAPABILITY_OWNED_JOBS, 1) { "available" } else { "missing" };
+    let adapters =
+        if profile.supports(HOST_CAPABILITY_ADAPTER_RUNTIME, 1) { "available" } else { "missing" };
+    let laboratories = if profile.supports(HOST_CAPABILITY_APPLICATION_LABORATORY, 1) {
+        "available"
+    } else {
+        "missing"
+    };
     let required = [
         HOST_CAPABILITY_SCOPED_SOURCE,
         HOST_CAPABILITY_OWNED_JOBS,
         HOST_CAPABILITY_CHECKPOINT,
         HOST_CAPABILITY_PRIVATE_STATE,
+        HOST_CAPABILITY_ADAPTER_RUNTIME,
+        HOST_CAPABILITY_APPLICATION_LABORATORY,
     ]
     .into_iter()
     .filter(|name| !profile.supports(name, 1))
     .collect::<Vec<_>>();
     format!(
-        "# Red Team host compatibility\n\nScoped source: **{source}**.\n\nContained proof and copy-only replay jobs: **{jobs}**.\n\nAvailable v1 capabilities: {}.\n\nMissing required runtime capabilities: {}.\n\nSource-build capability is used by the module market before installation, not by a running investigation. Missing capabilities do not cause ambient filesystem, process or network fallback.",
+        "# Red Team host compatibility\n\nScoped source: **{source}**.\n\nContained proof and copy-only replay jobs: **{jobs}**.\n\nManaged adapter runtime: **{adapters}**.\n\nDisposable application laboratory: **{laboratories}**.\n\nAvailable v1 capabilities: {}.\n\nMissing required runtime capabilities: {}.\n\nSource-build capability is used by the module market before installation, not by a running investigation. Missing capabilities do not cause ambient filesystem, process, container, endpoint or network fallback.",
         capability_names(profile).join(", "),
         list_or_none(&required),
     )
@@ -1437,11 +1657,13 @@ fn jobs_unavailable(profile: &Option<ModuleHostProfile>) -> ModuleAction {
 fn actions(state: &State) -> Vec<ModuleMenuAction> {
     let investigation_started =
         !matches!(state.investigation.stage, state::InvestigationStage::NotStarted);
-    let mut result = if !investigation_started {
+    let mut result = journey::actions(state);
+    let mut investigation_actions = if !investigation_started {
         vec![action("Status", "status", true)]
     } else {
         investigation::actions(state)
     };
+    result.append(&mut investigation_actions);
     if state.active_snapshot().is_none() {
         result.push(action("Scope current workspace", "scope", true));
     } else {
@@ -1449,7 +1671,43 @@ fn actions(state: &State) -> Vec<ModuleMenuAction> {
             result.push(action("Start autonomous investigation", "start", true));
         }
         result.extend([
+            action("Static analyzer support", "analyzers", true),
+            action("Install static analyzers", "analyzer-install", true),
+            action("Analyze scoped source", "analyze", true),
+            action("Static analysis history", "analysis-history", true),
+            action("HTTP/API support", "api", true),
+            action("Install HTTP/API adapter", "api-install", true),
+            action("Run HTTP/API campaign", "api-run", true),
+            action("HTTP/API campaign history", "api-history", true),
+            action("Browser-client support", "browser", true),
+            action("Install browser-client adapter", "browser-install", true),
+            action("Run real-browser campaign", "browser-run", true),
+            action("Browser campaign history", "browser-history", true),
+            action("Identity/access support", "identity", true),
+            action("Install identity/access adapter", "identity-install", true),
+            action("Run identity/access campaign", "identity-run", true),
+            action("Identity/access history", "identity-history", true),
+            action("File/parser fuzz support", "file-fuzz", true),
+            action("Install file/parser adapter", "file-fuzz-install", true),
+            action("Run file/parser campaign", "file-fuzz-run", true),
+            action("File/parser campaign history", "file-fuzz-history", true),
+            action("Workflow/state support", "workflow", true),
+            action("Install workflow/state adapter", "workflow-install", true),
+            action("Run workflow/state campaign", "workflow-run", true),
+            action("Workflow/state campaign history", "workflow-history", true),
+            action("Boundary/authority support", "boundary", true),
+            action("Install boundary/authority adapter", "boundary-install", true),
+            action("Run boundary/authority campaign", "boundary-run", true),
+            action("Boundary/authority campaign history", "boundary-history", true),
+            action("Attack-graph support", "graph", true),
+            action("Install attack-graph adapter", "graph-install", true),
+            action("Run cross-adapter attack graph", "graph-run", true),
+            action("Attack-graph history", "graph-history", true),
             action("Refresh source", "refresh", true),
+            action("Target profiles", "profiles", true),
+            action("Surface graph", "surfaces", true),
+            action("Method registry", "methods", true),
+            action("Coverage cells", "coverage", true),
             action("View manifest", "manifest", true),
             action("Observe source path", "observe ", false),
             action("Prepare pinned dependency", "prepare ", false),
@@ -1459,12 +1717,67 @@ fn actions(state: &State) -> Vec<ModuleMenuAction> {
         if !investigation_started {
             result.extend([
                 action("Contained jobs", "jobs", true),
-                action("Coverage gaps", "coverage", true),
                 action("Current report", "report", true),
             ]);
         }
     }
+    if let Some(laboratory) = state.laboratory_statuses.last() {
+        match laboratory.phase {
+            peritus_plugin_sdk::ModuleLaboratoryPhase::Created => {
+                result.push(action("Prepare laboratory", "lab-prepare", true));
+            }
+            peritus_plugin_sdk::ModuleLaboratoryPhase::Prepared
+            | peritus_plugin_sdk::ModuleLaboratoryPhase::Stopped => {
+                result.push(action("Launch laboratory", "lab-launch", true));
+                result.push(action("Tear down laboratory", "lab-teardown", true));
+            }
+            peritus_plugin_sdk::ModuleLaboratoryPhase::Ready => {
+                result.extend([
+                    action("Use laboratory", "lab-use ", false),
+                    action("Run HTTP/API campaign", "api-run", true),
+                    action("Run real-browser campaign", "browser-run", true),
+                    action("Run identity/access campaign", "identity-run", true),
+                    action("Run file/parser campaign", "file-fuzz-run", true),
+                    action("Run workflow/state campaign", "workflow-run", true),
+                    action("Run boundary/authority campaign", "boundary-run", true),
+                    action("Run cross-adapter attack graph", "graph-run", true),
+                    action("Snapshot laboratory", "lab-snapshot", true),
+                    action("Reset laboratory", "lab-reset", true),
+                    action("Stop laboratory", "lab-stop", true),
+                ]);
+            }
+            peritus_plugin_sdk::ModuleLaboratoryPhase::Failed
+            | peritus_plugin_sdk::ModuleLaboratoryPhase::Quarantined => {
+                result.push(action("Tear down laboratory", "lab-teardown", true));
+            }
+            peritus_plugin_sdk::ModuleLaboratoryPhase::TornDown => {}
+        }
+    }
     result.extend([
+        action("Static analyzer status", "analyzer-status", true),
+        action("HTTP/API adapter status", "api-status", true),
+        action("Browser-client adapter status", "browser-status", true),
+        action("Identity/access adapter status", "identity-status", true),
+        action("File/parser adapter status", "file-fuzz-status", true),
+        action("Workflow/state adapter status", "workflow-status", true),
+        action("Boundary/authority adapter status", "boundary-status", true),
+        action("Attack-graph adapter status", "graph-status", true),
+        action("Managed adapters", "adapters", true),
+        action("Install diagnostic adapter", "adapter-install diagnostic", true),
+        action("Adapter status", "adapter-status", true),
+        action("Adapter history", "adapter-history", true),
+        action("Laboratory recipes", "laboratories", true),
+        action("Create fixture laboratory", "lab-create fixture", true),
+        action("Create vulnerable HTTP/API laboratory", "lab-create http-vulnerable", true),
+        action("Create safe HTTP/API laboratory", "lab-create http-safe", true),
+        action("Create vulnerable identity laboratory", "lab-create identity-vulnerable", true),
+        action("Create safe identity laboratory", "lab-create identity-safe", true),
+        action("Create vulnerable workflow laboratory", "lab-create workflow-vulnerable", true),
+        action("Create safe workflow laboratory", "lab-create workflow-safe", true),
+        action("Create vulnerable boundary laboratory", "lab-create boundary-vulnerable", true),
+        action("Create safe boundary laboratory", "lab-create boundary-safe", true),
+        action("Laboratory status", "lab-status", true),
+        action("Laboratory history", "laboratory-history", true),
         action("Check compatibility", "compatibility", true),
         action("View contract", "contract", true),
         action("Save investigation checkpoint", "checkpoint", true),
@@ -1473,12 +1786,40 @@ fn actions(state: &State) -> Vec<ModuleMenuAction> {
 }
 
 fn base_actions() -> Vec<ModuleMenuAction> {
-    vec![
+    let mut result = vec![
+        action("View complete campaign plan", "campaign-plan", true),
+        action("Start complete campaign", "campaign-start", true),
         action("Status", "status", true),
+        action("Static analyzer support", "analyzers", true),
+        action("Install static analyzers", "analyzer-install", true),
+        action("HTTP/API support", "api", true),
+        action("Install HTTP/API adapter", "api-install", true),
+        action("Browser-client support", "browser", true),
+        action("Install browser-client adapter", "browser-install", true),
+        action("Identity/access support", "identity", true),
+        action("Install identity/access adapter", "identity-install", true),
+        action("Boundary/authority support", "boundary", true),
+        action("Install boundary/authority adapter", "boundary-install", true),
+        action("Attack-graph support", "graph", true),
+        action("Install attack-graph adapter", "graph-install", true),
+        action("Managed adapters", "adapters", true),
+        action("Install diagnostic adapter", "adapter-install diagnostic", true),
+        action("Adapter history", "adapter-history", true),
+        action("Laboratory recipes", "laboratories", true),
+        action("Create fixture laboratory", "lab-create fixture", true),
+        action("Create vulnerable HTTP/API laboratory", "lab-create http-vulnerable", true),
+        action("Create safe HTTP/API laboratory", "lab-create http-safe", true),
+        action("Create vulnerable identity laboratory", "lab-create identity-vulnerable", true),
+        action("Create safe identity laboratory", "lab-create identity-safe", true),
+        action("Create vulnerable boundary laboratory", "lab-create boundary-vulnerable", true),
+        action("Create safe boundary laboratory", "lab-create boundary-safe", true),
+        action("Laboratory history", "laboratory-history", true),
         action("Scope current workspace", "scope", true),
         action("Check compatibility", "compatibility", true),
         action("View contract", "contract", true),
-    ]
+    ];
+    result.push(action("Export SARIF", "sarif", true));
+    result
 }
 
 fn action(label: &str, arguments: &str, submit: bool) -> ModuleMenuAction {

@@ -27,7 +27,7 @@ remain retained.
 | Module | Code and function |
 | --- | --- |
 | [Deep Research](modules/deep-research/) | Native Rust planner, gatherer, skeptical source admission, synthesis, final fact-checking, persistent evidence ledger, and report generation. |
-| [Red Team](modules/red-team/) | Source-built Rust foundation for explicit scoped source, retained evidence, contained proof jobs, and authorized defensive investigation. |
+| [Red Team](modules/red-team/) | Source-built Rust defensive harness with a durable guided complete campaign, scoped source, class-specific real-interface adapters, receipt-backed cross-adapter attack graphs, copy-only repair replay, and Markdown/JSON/SARIF evidence exports. |
 
 Red Team is deliberately absent from the legacy executable `market.toml`; no generated binary is
 committed. Current Linux hosts discover it through the additive `sources.toml`, show **Build and

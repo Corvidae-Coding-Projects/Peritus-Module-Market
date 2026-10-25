@@ -1,15 +1,14 @@
 //! Phase-five campaign coordination over exact scoped source and host-owned proof receipts.
 
 use crate::{
-    Error, digest, invalid,
+    Error, coverage, digest, invalid,
     records::{
-        CoverageState, FindingClassification, FindingRecord, HypothesisRecord, HypothesisState,
+        FindingClassification, FindingRecord, HypothesisRecord, HypothesisState,
         RECORD_SCHEMA_VERSION, RecordId, RecordKind, ReviewDecision, ReviewRecord,
     },
     state::{
-        FamilyRoute, HypothesisOrigin, HypothesisPlan, InventoryRecord, InvestigationStage,
-        PendingRequest, ProbeAttempt, ProbeState, ProviderRouteRecord, QueuedRead, State,
-        security_families,
+        HypothesisOrigin, HypothesisPlan, InvestigationStage, PendingRequest, ProbeAttempt,
+        ProbeState, ProviderRouteRecord, QueuedRead, State, security_families,
     },
 };
 use peritus_plugin_sdk::{
@@ -27,24 +26,6 @@ const EVIDENCE_STATES: &str = include_str!("../skills/red-team/references/eviden
 const MAX_SOURCE_PAGE: u64 = 1024 * 1024;
 const MAX_BATCH_SOURCE_BYTES: u64 = 512 * 1024;
 const MAX_BATCH_SOURCE_RANGES: usize = 32;
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct InventoryInput {
-    surfaces: Vec<String>,
-    threat_boundaries: Vec<String>,
-    routes: Vec<RouteInput>,
-    source_evidence: Vec<String>,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct RouteInput {
-    family: String,
-    state: String,
-    reason: String,
-    surfaces: Vec<String>,
-}
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -249,7 +230,7 @@ fn model(state: &State, role: &str) -> Result<ModuleAction, Error> {
         "inventory" => (
             "writer",
             "Red Team · bounded inventory",
-            "Perform exactly one bounded inventory and threat-boundary pass. Start with red_team_inspect(kind=inventory) once. When more than one small source page is needed, make one red_team_observe_many call instead of separate observations; its host reads complete before your next turn. Request only pages needed to identify concrete surfaces and boundaries. After requested source pages are delivered in coordinator feedback, treat them as retained: do not inspect or request those unchanged ranges again in this role. Route all supported families; unexamined and blocked are honest results. Finish promptly with red_team_inventory_commit.",
+            "Perform exactly one bounded inventory and threat-boundary pass. Start with red_team_inspect(kind=inventory) once. When more than one small source page is needed, make one red_team_observe_many call instead of separate observations; its host reads complete before your next turn. Request only pages needed to identify concrete profiles, components, surfaces, identities/configurations, properties and boundaries. After requested source pages are delivered in coordinator feedback, treat them as retained: do not inspect or request those unchanged ranges again in this role. Route all supported families into exact surface × identity/configuration × property × method obligations. Inventory prose cannot mark anything examined. Use `gap.no-compatible-runtime.v1` for honest unsupported cells. Finish promptly with red_team_inventory_commit.",
         ),
         "discovery" => (
             "writer",
@@ -321,8 +302,8 @@ fn functions(role: &str) -> Vec<ModuleFunction> {
     if role == "inventory" {
         values.push(function(
             "red_team_inventory_commit",
-            "Commit the one bounded inventory, threat boundaries, all family routes and exact source evidence used. source_evidence values are the evidence_id strings returned by source observations; unique source or artifact digests are also accepted as safe aliases.",
-            json!({"type":"object","additionalProperties":false,"properties":{"surfaces":{"type":"array","minItems":1,"maxItems":512,"items":{"type":"string","minLength":1,"maxLength":4096}},"threat_boundaries":{"type":"array","minItems":1,"maxItems":128,"items":{"type":"string","minLength":1,"maxLength":4096}},"routes":{"type":"array","minItems":15,"maxItems":15,"items":{"type":"object","additionalProperties":false,"properties":{"family":{"type":"string","minLength":1,"maxLength":128},"state":{"type":"string","enum":["unexamined","examined","not_applicable","blocked"]},"reason":{"type":"string","minLength":1,"maxLength":4096},"surfaces":{"type":"array","minItems":1,"maxItems":512,"items":{"type":"string","minLength":1,"maxLength":4096}}},"required":["family","state","reason","surfaces"]}},"source_evidence":{"type":"array","minItems":1,"maxItems":512,"items":{"type":"string","minLength":1,"maxLength":128}}},"required":["surfaces","threat_boundaries","routes","source_evidence"]}),
+            "Compile the one bounded inventory into durable profiles, components, surfaces, trust boundaries, identity/configurations, versioned properties, and method-backed coverage cells. source_evidence values are exact retained evidence identities. Use only method ids analysis.scoped-source-review.v1, runtime.linux-canary-disclosure.v1, and gap.no-compatible-runtime.v1. The canary method is valid only for command_line/native disclosure properties mapped to ASVS 5.0.0 V14.2.6 or CWE 4.18 CWE-200. Inventory states are unexamined, not_applicable, or blocked; only a coordinator-admitted method receipt can produce examined.",
+            inventory_schema(),
         ));
     } else if role == "discovery" {
         values.extend([
@@ -370,6 +351,51 @@ fn function(name: &str, description: &str, schema: Value) -> ModuleFunction {
 
 fn hypothesis_schema() -> Value {
     json!({"type":"object","additionalProperties":false,"properties":{"family":{"type":"string","minLength":1,"maxLength":128},"origin":{"type":"string","enum":["known_description","unknown_discovery"]},"attacker":{"type":"string","minLength":1,"maxLength":4096},"entry_point":{"type":"string","minLength":1,"maxLength":4096},"prerequisites":{"type":"array","maxItems":64,"items":{"type":"string","minLength":1,"maxLength":4096}},"security_property":{"type":"string","minLength":1,"maxLength":4096},"falsifiable_observation":{"type":"string","minLength":1,"maxLength":4096},"source_evidence":{"type":"array","minItems":1,"maxItems":128,"items":{"type":"string","minLength":1,"maxLength":128}},"target_path":{"type":["string","null"],"maxLength":4096},"attacker_input":{"type":["string","null"],"maxLength":16384,"description":"Exact single opaque second argument for the target, for example read. The host separately provides the hidden canary path as argv[1]. Never encode argv, JSON, shell syntax, or a host path here."},"changed_dimension":{"type":"string","minLength":1,"maxLength":4096}},"required":["family","origin","attacker","entry_point","prerequisites","security_property","falsifiable_observation","source_evidence","target_path","attacker_input","changed_dimension"]})
+}
+
+fn inventory_schema() -> Value {
+    let strings = || json!({"type":"array","minItems":1,"maxItems":128,"items":{"type":"string","minLength":1,"maxLength":4096}});
+    json!({
+        "type":"object",
+        "additionalProperties":false,
+        "properties":{
+            "profiles":{"type":"array","minItems":1,"maxItems":32,"items":{"type":"object","additionalProperties":false,"properties":{
+                "name":{"type":"string","minLength":1,"maxLength":256},
+                "kind":{"type":"string","enum":["command_line","native_application","web_application","api_service","browser_client","multi_service","other"]},
+                "operating_systems":strings(),"languages":strings(),
+                "services":{"type":"array","maxItems":128,"items":{"type":"string","minLength":1,"maxLength":4096}},
+                "stores":{"type":"array","maxItems":128,"items":{"type":"string","minLength":1,"maxLength":4096}},
+                "interfaces":strings(),
+                "unavailable_claims":{"type":"array","maxItems":128,"items":{"type":"string","minLength":1,"maxLength":4096}}
+            },"required":["name","kind","operating_systems","languages","services","stores","interfaces","unavailable_claims"]}},
+            "components":{"type":"array","minItems":1,"maxItems":256,"items":{"type":"object","additionalProperties":false,"properties":{
+                "name":{"type":"string","minLength":1,"maxLength":256},"profile":{"type":"string","minLength":1,"maxLength":256},"kind":{"type":"string","minLength":1,"maxLength":256},"source_paths":strings()
+            },"required":["name","profile","kind","source_paths"]}},
+            "surfaces":{"type":"array","minItems":1,"maxItems":512,"items":{"type":"object","additionalProperties":false,"properties":{
+                "name":{"type":"string","minLength":1,"maxLength":256},"profile":{"type":"string","minLength":1,"maxLength":256},"component":{"type":"string","minLength":1,"maxLength":256},
+                "kind":{"type":"string","enum":["command_line","native","web","api","browser","service","file","library","other"]},"entry_point":{"type":"string","minLength":1,"maxLength":4096},"source_paths":strings()
+            },"required":["name","profile","component","kind","entry_point","source_paths"]}},
+            "threat_boundaries":{"type":"array","minItems":1,"maxItems":256,"items":{"type":"object","additionalProperties":false,"properties":{
+                "name":{"type":"string","minLength":1,"maxLength":256},"profile":{"type":"string","minLength":1,"maxLength":256},"from_component":{"type":"string","minLength":1,"maxLength":256},"to_component":{"type":"string","minLength":1,"maxLength":256},"protected_assets":strings()
+            },"required":["name","profile","from_component","to_component","protected_assets"]}},
+            "identities":{"type":"array","minItems":1,"maxItems":128,"items":{"type":"object","additionalProperties":false,"properties":{
+                "name":{"type":"string","minLength":1,"maxLength":256},"profile":{"type":"string","minLength":1,"maxLength":256},"attacker":{"type":"string","minLength":1,"maxLength":4096},
+                "privileges":{"type":"array","maxItems":128,"items":{"type":"string","minLength":1,"maxLength":4096}},"configuration":strings()
+            },"required":["name","profile","attacker","privileges","configuration"]}},
+            "properties":{"type":"array","minItems":1,"maxItems":512,"items":{"type":"object","additionalProperties":false,"properties":{
+                "id":{"type":"string","pattern":"^[a-z0-9_.:-]+$","maxLength":160},"family":{"type":"string","minLength":1,"maxLength":128},"statement":{"type":"string","minLength":1,"maxLength":4096},
+                "standards":{"type":"array","minItems":1,"maxItems":16,"items":{"type":"object","additionalProperties":false,"properties":{
+                    "catalog":{"type":"string","enum":["ASVS","WSTG","CWE","PERITUS"]},"version":{"type":"string","minLength":1,"maxLength":32},"identifier":{"type":"string","minLength":1,"maxLength":128}
+                },"required":["catalog","version","identifier"]}}
+            },"required":["id","family","statement","standards"]}},
+            "routes":{"type":"array","minItems":15,"maxItems":15,"items":{"type":"object","additionalProperties":false,"properties":{
+                "family":{"type":"string","minLength":1,"maxLength":128},"state":{"type":"string","enum":["unexamined","not_applicable","blocked"]},"reason":{"type":"string","minLength":1,"maxLength":4096},
+                "surfaces":strings(),"identities":strings(),"properties":strings(),"methods":{"type":"array","minItems":1,"maxItems":3,"items":{"type":"string","enum":["analysis.scoped-source-review.v1","runtime.linux-canary-disclosure.v1","gap.no-compatible-runtime.v1"]}}
+            },"required":["family","state","reason","surfaces","identities","properties","methods"]}},
+            "source_evidence":{"type":"array","minItems":1,"maxItems":512,"items":{"type":"string","minLength":1,"maxLength":128}}
+        },
+        "required":["profiles","components","surfaces","threat_boundaries","identities","properties","routes","source_evidence"]
+    })
 }
 
 fn adjudication_schema() -> Value {
@@ -485,6 +511,10 @@ fn inspect(state: &State, arguments: &Value, role: &str) -> Result<Value, Error>
             "manifest_complete":state.investigation.manifest_complete,
             "retained_observations":state.current_observations().map(observation_summary).collect::<Vec<_>>(),
             "supported_families":security_families(),
+            "available_methods":state.methods,
+            "prior_inventory":state.investigation.inventory,
+            "prior_surfaces":state.application_surfaces,
+            "coverage_contract":"Inventory can create unexamined, not_applicable, or blocked cells. Only coordinator-admitted method evidence can create examined cells.",
         })),
         "inventory" => Ok(json!({
             "campaign":state.campaign.id.value,
@@ -492,6 +522,14 @@ fn inspect(state: &State, arguments: &Value, role: &str) -> Result<Value, Error>
             "manifest_entry_count":state.investigation.manifest_entries.len(),
             "retained_observations":state.current_observations().map(observation_summary).collect::<Vec<_>>(),
             "committed_inventory":state.investigation.inventory,
+            "target_profiles":state.target_profiles,
+            "components":state.application_components,
+            "surfaces":state.application_surfaces,
+            "trust_boundaries":state.trust_boundaries,
+            "identity_configurations":state.identity_configurations,
+            "security_properties":state.security_properties,
+            "methods":state.methods,
+            "coverage_cells":state.coverage_cells,
         })),
         "source" => {
             let path = arguments["path"].as_str();
@@ -505,12 +543,12 @@ fn inspect(state: &State, arguments: &Value, role: &str) -> Result<Value, Error>
         })),
         "evidence" => inspect_evidence(state, arguments),
         "coverage" => Ok(json!({
-            "coverage":state.coverage.iter().map(|record|json!({
-                "family":record.family,
-                "surface":record.surface,
-                "state":record.state,
-                "reason":record.reason,
-            })).collect::<Vec<_>>()
+            "profiles":state.target_profiles,
+            "surfaces":state.application_surfaces,
+            "identities":state.identity_configurations,
+            "properties":state.security_properties,
+            "methods":state.methods,
+            "cells":state.coverage_cells,
         })),
         _ => Err(invalid("unknown red_team_inspect kind")),
     }
@@ -701,63 +739,36 @@ fn observe_many(state: &mut State, arguments: &Value) -> Result<Value, Error> {
 }
 
 fn commit_inventory(state: &mut State, arguments: &Value) -> Result<Value, Error> {
-    let input: InventoryInput = serde_json::from_value(arguments.clone())?;
-    nonempty_list(&input.surfaces, "inventory surfaces")?;
-    nonempty_list(&input.threat_boundaries, "threat boundaries")?;
-    if input.routes.len() != security_families().len() {
-        return Err(invalid("inventory must route every supported security family exactly once"));
-    }
-    let expected = security_families().into_iter().collect::<BTreeSet<_>>();
-    let actual = input.routes.iter().map(|route| route.family.as_str()).collect::<BTreeSet<_>>();
-    if actual != expected || actual.len() != input.routes.len() {
-        return Err(invalid("inventory family routes are missing, duplicated, or unknown"));
-    }
+    let input: coverage::InventoryInput = serde_json::from_value(arguments.clone())?;
     let evidence = evidence_ids(state, &input.source_evidence)?;
-    if evidence.is_empty() {
-        return Err(invalid("inventory must bind at least one exact retained source observation"));
-    }
-    let routes = input
-        .routes
-        .into_iter()
-        .map(|route| {
-            if route.reason.trim().is_empty() || route.surfaces.is_empty() {
-                return Err(invalid("every family route needs a reason and at least one surface"));
-            }
-            Ok(FamilyRoute {
-                family: route.family,
-                state: coverage_state(&route.state)?,
-                reason: route.reason,
-                surfaces: route.surfaces,
-            })
-        })
-        .collect::<Result<Vec<_>, Error>>()?;
-    for coverage in &mut state.coverage {
-        let route = routes
-            .iter()
-            .find(|route| route.family == coverage.family)
-            .expect("validated complete routes");
-        coverage.state = route.state;
-        coverage.surface = route.surfaces.join(", ");
-        coverage.reason = route.reason.clone();
-        coverage.evidence = evidence.clone();
-    }
-    state.investigation.inventory = Some(InventoryRecord {
-        surfaces: input.surfaces,
-        threat_boundaries: input.threat_boundaries,
-        routes,
-        source_observations: evidence,
-    });
+    state.investigation.inventory = Some(coverage::compile(state, input, evidence)?);
     state.investigation.stage = InvestigationStage::Discovery;
     state.investigation.feedback =
-        "The bounded inventory is committed. Reuse it; investigate small falsifiable hypotheses without another repository-wide pass."
+        "The bounded target graph and method-backed coverage cells are committed. Reuse them; investigate small falsifiable hypotheses without another repository-wide pass."
             .into();
-    Ok(json!({"saved":true,"request_complete":true,"next_stage":"discovery"}))
+    Ok(json!({
+        "saved":true,
+        "request_complete":true,
+        "next_stage":"discovery",
+        "profiles":state.target_profiles.len(),
+        "surfaces":state.application_surfaces.len(),
+        "coverage_cells":state.coverage_cells.len()
+    }))
 }
 
 fn register_hypothesis(state: &mut State, arguments: &Value) -> Result<Value, Error> {
     let input: HypothesisInput = serde_json::from_value(arguments.clone())?;
     if !security_families().contains(&input.family.as_str()) {
         return Err(invalid("hypothesis names an unsupported security family"));
+    }
+    if !state.application_surfaces.is_empty()
+        && !state.application_surfaces.iter().any(|surface| {
+            surface.name == input.entry_point || surface.entry_point == input.entry_point
+        })
+    {
+        return Err(invalid(
+            "hypothesis entry_point must name a compiled surface name or exact entry point",
+        ));
     }
     for value in [
         &input.attacker,
@@ -1015,6 +1026,36 @@ pub(crate) fn job_status(state: &mut State, status: &ModuleJobStatus) -> bool {
                 RecordId::new(RecordKind::Evidence, format!("execution-{}", &receipt_digest[..24]))
                     .ok()
             });
+            let hypothesis_id = probe.hypothesis_id.clone();
+            let method_evidence = probe.evidence.clone();
+            if status.receipt.as_ref().is_some_and(|receipt| {
+                matches!(
+                    receipt.verdict,
+                    ModuleJobVerdict::ViolationObserved | ModuleJobVerdict::PropertyHeldForCase
+                )
+            }) && let Some(evidence) = method_evidence
+            {
+                let family = state
+                    .investigation
+                    .hypothesis_plans
+                    .iter()
+                    .find(|plan| plan.hypothesis_id == hypothesis_id)
+                    .map(|plan| plan.family.clone());
+                let entry_point = state
+                    .hypotheses
+                    .iter()
+                    .find(|hypothesis| hypothesis.id.value == hypothesis_id)
+                    .map(|hypothesis| hypothesis.entry_point.clone());
+                if let (Some(family), Some(entry_point)) = (family, entry_point) {
+                    crate::coverage::record_runtime_method(
+                        state,
+                        &status.operation,
+                        &family,
+                        &entry_point,
+                        &evidence,
+                    );
+                }
+            }
             true
         }
         ModuleJobPhase::Indeterminate => {
@@ -1323,16 +1364,6 @@ fn request_key(state: &State, role: &str) -> String {
     format!("red-team-{role}-{snapshot}-r{}", state.investigation.round)
 }
 
-fn coverage_state(value: &str) -> Result<CoverageState, Error> {
-    match value {
-        "unexamined" => Ok(CoverageState::Unexamined),
-        "examined" => Ok(CoverageState::Examined),
-        "not_applicable" => Ok(CoverageState::NotApplicable),
-        "blocked" => Ok(CoverageState::Blocked),
-        _ => Err(invalid("unknown coverage state")),
-    }
-}
-
 fn finding_classification(value: &str) -> Result<FindingClassification, Error> {
     match value {
         "confirmed" => Ok(FindingClassification::Confirmed),
@@ -1343,13 +1374,6 @@ fn finding_classification(value: &str) -> Result<FindingClassification, Error> {
         "blocked" => Ok(FindingClassification::Blocked),
         _ => Err(invalid("unknown finding classification")),
     }
-}
-
-fn nonempty_list(values: &[String], label: &str) -> Result<(), Error> {
-    if values.is_empty() || values.iter().any(|value| value.trim().is_empty()) {
-        return Err(invalid(format!("{label} must contain nonempty values")));
-    }
-    Ok(())
 }
 
 fn provider_routes(parameters: &Value) -> Vec<ProviderRouteRecord> {
@@ -1405,7 +1429,10 @@ pub(crate) fn actions(state: &State) -> Vec<ModuleMenuAction> {
         }
     }
     actions.extend([
-        action("Coverage ledger", "coverage", true),
+        action("Target profiles", "profiles", true),
+        action("Surface graph", "surfaces", true),
+        action("Method registry", "methods", true),
+        action("Coverage cells", "coverage", true),
         action("Findings", "findings", true),
         action("Patches and exact diffs", "patches", true),
         action("Export partial Markdown report", "report", true),
