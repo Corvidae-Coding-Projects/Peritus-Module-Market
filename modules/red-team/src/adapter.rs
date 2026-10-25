@@ -2,12 +2,13 @@
 
 use crate::{Error, invalid, reply, state, state::PendingRequest};
 use peritus_plugin_sdk::{
-    HOST_CAPABILITY_WORKER, MODULE_WORKER_FEATURE_BROWSER_AUTOMATION, ModuleAction,
-    ModuleAdapterCancelRequest, ModuleAdapterCatalog, ModuleAdapterCompleteRequest,
-    ModuleAdapterExecuteRequest, ModuleAdapterExecutionReceipt, ModuleAdapterPhase,
-    ModuleAdapterPreparationHandle, ModuleAdapterPrepareRequest, ModuleAdapterRemoveRequest,
-    ModuleAdapterRuntimeIdentity, ModuleAdapterStatus, ModuleAdapterStatusRequest,
-    ModuleHostProfile, ModuleHostRequest, ModuleWorkerLimits, ModuleWorkerRequest,
+    HOST_CAPABILITY_WORKER, MODULE_WORKER_FEATURE_BROWSER_AUTOMATION,
+    MODULE_WORKER_FEATURE_CARGO_DEPENDENCIES, ModuleAction, ModuleAdapterCancelRequest,
+    ModuleAdapterCatalog, ModuleAdapterCompleteRequest, ModuleAdapterExecuteRequest,
+    ModuleAdapterExecutionReceipt, ModuleAdapterPhase, ModuleAdapterPreparationHandle,
+    ModuleAdapterPrepareRequest, ModuleAdapterRemoveRequest, ModuleAdapterRuntimeIdentity,
+    ModuleAdapterStatus, ModuleAdapterStatusRequest, ModuleHostProfile, ModuleHostRequest,
+    ModuleWorkerLimits, ModuleWorkerRequest,
 };
 use serde_json::{Value, json};
 
@@ -449,15 +450,15 @@ fn worker_runtime_features(pending: &PendingRequest) -> Vec<String> {
     let PendingRequest::AdapterExecute { request, .. } = pending else {
         return Vec::new();
     };
-    if matches!(
-        request.runtime.adapter_id.as_str(),
-        crate::browser_client::ADAPTER_ID
-            | crate::attack_graph::ADAPTER_ID
-            | crate::diamond_binding::ADAPTER_ID
-    ) {
-        vec![MODULE_WORKER_FEATURE_BROWSER_AUTOMATION.into()]
-    } else {
-        Vec::new()
+    match request.runtime.adapter_id.as_str() {
+        crate::diamond_binding::ADAPTER_ID => vec![
+            MODULE_WORKER_FEATURE_BROWSER_AUTOMATION.into(),
+            MODULE_WORKER_FEATURE_CARGO_DEPENDENCIES.into(),
+        ],
+        crate::browser_client::ADAPTER_ID | crate::attack_graph::ADAPTER_ID => {
+            vec![MODULE_WORKER_FEATURE_BROWSER_AUTOMATION.into()]
+        }
+        _ => Vec::new(),
     }
 }
 
