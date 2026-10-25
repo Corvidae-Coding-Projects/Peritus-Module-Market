@@ -159,7 +159,11 @@ fn validate_observation(
 ) -> Result<(), Error> {
     if observation.schema != 1
         || observation.adapter_version != "peritus-workflow-state-2026-10-24.1"
-        || observation.suite_version != "peritus-workflow-state-suite-2026-10-24.1"
+        || !matches!(
+            observation.suite_version.as_str(),
+            "peritus-workflow-state-suite-2026-10-24.1"
+                | "peritus-workflow-state-diamond-2026-10-25.1"
+        )
         || observation.campaign_digest.len() != 64
         || observation.final_state_digest.len() != 64
         || observation.actions_executed

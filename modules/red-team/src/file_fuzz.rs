@@ -159,7 +159,10 @@ fn validate_observation(
 ) -> Result<(), Error> {
     if observation.schema != 1
         || observation.adapter_version != "peritus-file-parser-2026-10-24.1"
-        || observation.suite_version != "peritus-file-parser-suite-2026-10-24.1"
+        || !matches!(
+            observation.suite_version.as_str(),
+            "peritus-file-parser-suite-2026-10-24.1" | "peritus-file-parser-diamond-2026-10-25.1"
+        )
         || observation.corpus_digest.len() != 64
         || observation.instrumentation.coverage_digest.len() != 64
         || observation.campaign_digest.len() != 64

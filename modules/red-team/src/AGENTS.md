@@ -8,6 +8,7 @@
 | [attack_graph.rs](attack_graph.rs) | Phase 19 cross-adapter graph commands, receipt admission, causal-path validation, counterfactual/rejection checks, repair replay review, coverage, and history. |
 | [browser_client.rs](browser_client.rs) | Phase 14 browser/client adapter commands, receipt admission, browser/server oracle correlation, coverage mapping, artifacts, history, and rejection probes. |
 | [coverage.rs](coverage.rs) | Phase 9 target-profile compiler, versioned property mappings, method registry, exact coverage cells, receipt-only transitions, and selective invalidation. |
+| [diamond_binding.rs](diamond_binding.rs) | First-party Diamond application commands and composite receipt admission, splitting one disposable build into seven independently validated class observations. |
 | [http_api.rs](http_api.rs) | Phase 13 HTTP/API adapter commands, runtime-receipt admission, pinned-oracle validation, replay identity, coverage mapping, and result/history projection. |
 | [identity_access.rs](identity_access.rs) | Phase 15 module-private identity/session/access-control commands, receipt admission, redaction validation, lifecycle graph, differential oracles, coverage, and history. |
 | [file_fuzz.rs](file_fuzz.rs) | Phase 16 file/archive/parser/native-fault commands, exact-input validation, finding admission, coverage/resource receipts, history, and rejection probes. |
@@ -26,6 +27,7 @@
 | [runtime_laboratory.rs](runtime_laboratory.rs) | Module-owned target selection, launch, private Unix transport, state oracles, and complete cleanup inside the generic worker sandbox. |
 | [runtime_browser.rs](runtime_browser.rs) | Module-owned Playwright/Chromium preparation and bounded browser-driver execution. |
 | [runtime_browser_client.rs](runtime_browser_client.rs) | Real-browser client-security campaign and artifact admission. |
+| [runtime_diamond.rs](runtime_diamond.rs) | Diamond-specific disposable build, CLI/server launch, HTTP, identity, parser, workflow, boundary, browser, and negative attack-graph campaign implementation. |
 | [runtime_http_api.rs](runtime_http_api.rs) | REST/OpenAPI/GraphQL/WebSocket/JSON-RPC request generation and response/state oracles. |
 | [runtime_identity_access.rs](runtime_identity_access.rs) | Authentication, session, role, ownership, and tenancy campaign implementation. |
 | [runtime_file_fuzz.rs](runtime_file_fuzz.rs) | File, archive, parser, minimization, resource, and native-child campaign implementation. |

@@ -17,6 +17,7 @@ use std::{
 const MAXIMUM_RESULT_BYTES: u64 = 256 * 1024;
 const BROWSER_CAMPAIGN: &str = include_str!("../resources/browser_campaign.py");
 const ATTACK_GRAPH_BROWSER: &str = include_str!("../resources/attack_graph_browser.py");
+const DIAMOND_BROWSER: &str = include_str!("../resources/diamond_browser_campaign.py");
 
 pub(super) fn campaign(
     directory: &Path,
@@ -61,6 +62,16 @@ pub(super) fn attack_graph(
             ("--maximum-requests".into(), maximum_requests.to_string().into()),
         ],
         Duration::from_secs(45),
+    )
+}
+
+pub(super) fn diamond_campaign(directory: &Path, target: &str) -> Result<Value, String> {
+    run(
+        directory,
+        "diamond_browser_campaign.py",
+        DIAMOND_BROWSER,
+        vec![("--target".into(), target.into())],
+        Duration::from_secs(90),
     )
 }
 

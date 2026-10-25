@@ -367,6 +367,11 @@ fn catalog() -> ModuleAdapterCatalog {
                 crate::attack_graph::OPERATION,
                 "peritus.attack-graph.decoder@1",
             ),
+            descriptor(
+                crate::diamond_binding::ADAPTER_ID,
+                crate::diamond_binding::OPERATION,
+                "peritus.diamond-application.decoder@1",
+            ),
         ],
     }
 }
@@ -579,6 +584,13 @@ fn execute(
             )?)
             .map_err(json_error)?
         }
+        crate::diamond_binding::OPERATION => serde_json::to_value(crate::runtime_diamond::execute(
+            request.input.clone(),
+            input.source_snapshot.clone(),
+            &input.request_key,
+            &worker_state_root()?,
+        )?)
+        .map_err(json_error)?,
         operation => return Err(format!("unknown module-owned adapter operation `{operation}`")),
     };
     encode(ModuleAdapterExecutionReceipt {

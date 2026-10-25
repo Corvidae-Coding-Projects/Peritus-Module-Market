@@ -31,7 +31,7 @@ pub(crate) fn command(
 ) -> Result<ModuleAction, Error> {
     match command {
         "campaign" => Ok(reply(view(state), profile, super::actions(state), None)),
-        "campaign-plan" => Ok(reply(plan_text(), profile, plan_actions(), None)),
+        "campaign-plan" => Ok(reply(plan_text(state), profile, plan_actions(), None)),
         "campaign-start" => start(parameters, profile, state),
         "campaign-next" => next(parameters, profile, state),
         "campaign-pause" => pause(parameters, profile, state),
@@ -117,7 +117,7 @@ fn start(
             None,
         ));
     }
-    let steps = plan();
+    let steps = plan(state);
     let failures = steps
         .iter()
         .filter(|step| step.state == JourneyStepState::Skipped)
@@ -184,6 +184,7 @@ fn next(
         state::save(parameters, state)?;
         return Ok(reply(view(state), profile, super::actions(state), None));
     }
+    refresh_application_plan(state);
     advance_accounted_steps(state);
     if state.journey.cursor >= state.journey.steps.len() {
         state.journey.stage = JourneyStage::Complete;
@@ -291,6 +292,7 @@ fn satisfied(
         "workflow-run" => state.workflow_observations.len(),
         "boundary-run" => state.boundary_observations.len(),
         "graph-run" => state.attack_graph_observations.len(),
+        "diamond-run" => state.attack_graph_observations.len(),
         _ => 0,
     };
     if command == "analyze" {
@@ -308,6 +310,7 @@ fn satisfied(
             | "workflow-run"
             | "boundary-run"
             | "graph-run"
+            | "diamond-run"
     ) {
         return Ok(now.observations > step.baseline.observations && observed > 0);
     }
@@ -430,6 +433,7 @@ fn laboratory_recovery_needed(state: &state::State, step: &state::JourneyStep) -
                 | "workflow-run"
                 | "boundary-run"
                 | "graph-run"
+                | "diamond-run"
         )
 }
 
@@ -663,6 +667,7 @@ fn install_adapter_id(command: &str) -> Option<&'static str> {
         "workflow-install" => Some(crate::workflow_state::ADAPTER_ID),
         "boundary-install" => Some(crate::boundary_authority::ADAPTER_ID),
         "graph-install" => Some(crate::attack_graph::ADAPTER_ID),
+        "diamond-install" => Some(crate::diamond_binding::ADAPTER_ID),
         _ => None,
     }
 }
@@ -684,7 +689,7 @@ fn step(
     }
 }
 
-fn plan() -> Vec<state::JourneyStep> {
+fn plan(state: &state::State) -> Vec<state::JourneyStep> {
     let mut steps = Vec::new();
     for (id, label, command) in [
         ("install-source", "Install source analyzer", "analyzer-install"),
@@ -700,6 +705,20 @@ fn plan() -> Vec<state::JourneyStep> {
         None,
     ));
     steps.push(step("source-snapshot", "Snapshot disposable source effects", "lab-snapshot", None));
+    if diamond_source_observed(state) {
+        steps.push(step(
+            "install-diamond-binding",
+            "Install the Diamond application binding",
+            "diamond-install",
+            None,
+        ));
+        steps.push(step(
+            "run-diamond-binding",
+            "Run HTTP, browser, identity, parser, workflow, boundary, and attack-graph campaigns against Diamond",
+            "diamond-run",
+            None,
+        ));
+    }
     steps.push(step("source-stop", "Stop source laboratory", "lab-stop", None));
     steps.push(step(
         "source-teardown",
@@ -707,6 +726,9 @@ fn plan() -> Vec<state::JourneyStep> {
         "lab-teardown",
         None,
     ));
+    if diamond_source_observed(state) {
+        return steps;
+    }
     for (id, label, detail) in [
         (
             "api-applicability-gap",
@@ -749,6 +771,69 @@ fn plan() -> Vec<state::JourneyStep> {
     steps
 }
 
+pub(crate) fn diamond_source_observed(state: &state::State) -> bool {
+    let paths = state
+        .investigation
+        .manifest_entries
+        .iter()
+        .map(|entry| entry.path.as_str())
+        .collect::<std::collections::BTreeSet<_>>();
+    let manifest_match = ["Cargo.toml", "Cargo.lock", "src/main.rs", "examples/web.dia"]
+        .iter()
+        .all(|path| paths.contains(path));
+    let analysis_match = state.analysis_observations.iter().rev().any(|observation| {
+        state.active_snapshot().is_some_and(|snapshot| {
+            observation.source_snapshot == snapshot.snapshot_digest
+                && observation.manifests.iter().any(|item| item.path == "Cargo.toml")
+                && observation.manifests.iter().any(|item| item.path == "Cargo.lock")
+                && observation.components.iter().any(|component| {
+                    component.ecosystem == "cargo" && component.name == "diamond-lang"
+                })
+        })
+    });
+    manifest_match || analysis_match
+}
+
+fn refresh_application_plan(state: &mut state::State) {
+    if !diamond_source_observed(state)
+        || state.journey.steps.iter().any(|step| step.id == "run-diamond-binding")
+    {
+        return;
+    }
+    let removed_failures = state
+        .journey
+        .steps
+        .iter()
+        .filter(|step| step.id.ends_with("-applicability-gap"))
+        .map(|step| step.detail.clone())
+        .collect::<std::collections::BTreeSet<_>>();
+    state.journey.steps.retain(|step| !step.id.ends_with("-applicability-gap"));
+    state.journey.failures.retain(|failure| !removed_failures.contains(failure));
+    let insert_at = state
+        .journey
+        .steps
+        .iter()
+        .position(|step| step.id == "source-stop")
+        .unwrap_or(state.journey.steps.len());
+    state.journey.steps.splice(
+        insert_at..insert_at,
+        [
+            step(
+                "install-diamond-binding",
+                "Install the Diamond application binding",
+                "diamond-install",
+                None,
+            ),
+            step(
+                "run-diamond-binding",
+                "Run HTTP, browser, identity, parser, workflow, boundary, and attack-graph campaigns against Diamond",
+                "diamond-run",
+                None,
+            ),
+        ],
+    );
+}
+
 fn gap_step(id: &str, label: &str, detail: &str) -> state::JourneyStep {
     let mut value = step(id, label, "accounted-gap", None);
     value.state = JourneyStepState::Skipped;
@@ -777,8 +862,8 @@ fn add_open_lab(steps: &mut Vec<state::JourneyStep>, alias: &str, create: &str) 
     ));
 }
 
-fn plan_text() -> String {
-    let steps = plan();
+fn plan_text(state: &state::State) -> String {
+    let steps = plan(state);
     let mut text = format!(
         "# Source-bound Red Team campaign\n\n{} sequential or pre-accounted steps; at most one host operation is active. The journey scans the exact immutable source, copies the complete tree, executes a discovered real entry point without requiring target-specific contracts, records copied-tree effects, and proves cleanup plus original-source integrity before it becomes complete. Every registered class-specific adapter is also represented in the retained ledger. An adapter without an independently derived compatible application contract is pre-accounted as a skipped coverage gap; bundled fixtures are calibration targets and are never substituted for the selected application. Markdown, JSON, SARIF, patch, and replay exports become available only after the journey reaches its durable terminal state, so final artifacts cannot describe an in-progress campaign.\n\n",
         steps.len()

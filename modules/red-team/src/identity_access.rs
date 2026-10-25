@@ -159,7 +159,11 @@ fn validate_observation(
 ) -> Result<(), Error> {
     if observation.schema != 1
         || observation.adapter_version != "peritus-identity-access-2026-10-24.1"
-        || observation.suite_version != "peritus-identity-access-suite-2026-10-24.1"
+        || !matches!(
+            observation.suite_version.as_str(),
+            "peritus-identity-access-suite-2026-10-24.1"
+                | "peritus-identity-access-diamond-2026-10-25.1"
+        )
         || observation.traffic_digest.len() != 64
         || observation.redaction.projection_digest.len() != 64
         || !observation.redaction.provider_projection_clean

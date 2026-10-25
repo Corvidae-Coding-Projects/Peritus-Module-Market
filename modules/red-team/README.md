@@ -271,6 +271,42 @@ predeclared exit/output oracle. Static analysis still runs when a repository has
 surface or its required toolchain is unavailable; that dynamic limitation is recorded as a gap,
 not as a clean result.
 
+### First-party Diamond application binding
+
+When the scoped source contains the Diamond Rust package plus `examples/web.dia`, the complete
+campaign selects a first-party application binding instead of leaving the class adapters as generic
+gaps. The binding remains wholly inside this module: Peritus still provides only a disposable source
+copy and bounded worker process.
+
+The binding compiles that disposable copy once, starts the real `diamond` CLI/server, and runs seven
+application-specific campaigns:
+
+- HTTP route, typed-path, method, proxy-header, output-encoding, and response behavior;
+- Chromium navigation, login form, cookie policy, reflected-markup rendering, context reset, and
+  off-scope network blocking;
+- local authentication, CSRF bootstrap, invalid and valid login, protected-route, and ambiguous
+  cookie behavior without retaining credentials;
+- real `diamond check` parser cases over valid, malformed, binary-boundary, deeply nested, and
+  hostile-route inputs;
+- a documented anonymous-to-authenticated workflow with ordered state receipts;
+- Host, forwarded-header, Origin, body-size, and loopback-bind boundaries plus explicit TLS/cloud/
+  privilege gaps; and
+- a source/HTTP/browser attack graph that retains broken and rejected chains and deliberately emits
+  no patch when no impact chain is confirmed.
+
+Run it manually while a complete-source laboratory is ready:
+
+```text
+/module peritus.red-team diamond-install
+/module peritus.red-team diamond-run
+/module peritus.red-team diamond
+```
+
+Or use `campaign-start`; after source discovery recognizes the Diamond layout, the durable journey
+installs and runs this binding before cleanup. Results still describe only the exact cases executed.
+Unsupported Diamond examples, project/PostgreSQL deployments, TLS, cloud-provider behavior, and
+unselected application profiles remain named gaps rather than implied coverage.
+
 Run the source-bound path after opening the application repository and selecting `scope`:
 
 ```text

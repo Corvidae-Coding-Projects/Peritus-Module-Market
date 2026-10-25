@@ -5,6 +5,7 @@ mod attack_graph;
 mod boundary_authority;
 mod browser_client;
 mod coverage;
+mod diamond_binding;
 mod file_fuzz;
 mod http_api;
 mod identity_access;
@@ -18,6 +19,7 @@ mod runtime_attack_graph;
 mod runtime_boundary_authority;
 mod runtime_browser;
 mod runtime_browser_client;
+mod runtime_diamond;
 mod runtime_file_fuzz;
 mod runtime_http_api;
 mod runtime_identity_access;
@@ -152,6 +154,9 @@ fn command(parameters: &Value) -> Result<ModuleAction, Error> {
     if journey::handles(command) {
         return journey::command(parameters, &host, &mut state, command);
     }
+    if diamond_binding::handles(command) {
+        return diamond_binding::command(parameters, &host, &mut state, command);
+    }
     if command == "pause" {
         return investigation::pause(parameters, &mut state);
     }
@@ -245,7 +250,7 @@ fn command(parameters: &Value) -> Result<ModuleAction, Error> {
         return cancel_job(parameters, &host, &mut state, command);
     }
     Ok(reply(
-        "Unknown Red Team command. Use campaign-plan, campaign-start, campaign, campaign-next, campaign-pause, campaign-resume, campaign-steer DETAILS, campaign-retry, campaign-skip, campaign-abort, start, status, pause, resume, steer DETAILS, scope, refresh, profiles, surfaces, methods, coverage, analyzers, analyzer-install, analyze, analysis-history, analyzer-status, analyzer-remove, api, api-install, api-run, api-history, api-status, api-remove, browser, browser-install, browser-run, browser-history, browser-status, browser-remove, identity, identity-install, identity-run, identity-history, file-fuzz, file-fuzz-install, file-fuzz-run, file-fuzz-history, file-fuzz-status, file-fuzz-remove, workflow, workflow-install, workflow-run, workflow-history, workflow-status, workflow-remove, boundary, boundary-install, boundary-run, boundary-history, boundary-status, boundary-remove, graph, graph-install, graph-run, graph-history, graph-status, graph-remove, laboratories, lab-create source, lab-prepare, lab-launch, lab-run-auto, lab-run RUNTIME ENTRYPOINT [ARGS...], lab-run-json JSON, lab-status, lab-select VALUE, lab-snapshot, lab-reset, lab-stop, lab-teardown, compatibility fixture commands, adapters, adapter-install diagnostic, adapter-stage diagnostic, adapter-complete, adapter-cancel, adapter-status, adapter-run MESSAGE, adapter-remove, manifest, observe PATH [offset=N] [bytes=N], probe PATH [input=LITERAL], jobs, job ID, job-log ID STREAM [offset=N] [bytes=N], job-cancel ID, findings, patches, report, report-json, sarif, bundle, revoke, compatibility, contract, or checkpoint.",
+        "Unknown Red Team command. Use campaign-plan, campaign-start, campaign, campaign-next, campaign-pause, campaign-resume, campaign-steer DETAILS, campaign-retry, campaign-skip, campaign-abort, start, status, pause, resume, steer DETAILS, scope, refresh, profiles, surfaces, methods, coverage, analyzers, analyzer-install, analyze, analysis-history, analyzer-status, analyzer-remove, diamond, diamond-install, diamond-run, diamond-status, diamond-remove, api, api-install, api-run, api-history, api-status, api-remove, browser, browser-install, browser-run, browser-history, browser-status, browser-remove, identity, identity-install, identity-run, identity-history, file-fuzz, file-fuzz-install, file-fuzz-run, file-fuzz-history, file-fuzz-status, file-fuzz-remove, workflow, workflow-install, workflow-run, workflow-history, workflow-status, workflow-remove, boundary, boundary-install, boundary-run, boundary-history, boundary-status, boundary-remove, graph, graph-install, graph-run, graph-history, graph-status, graph-remove, laboratories, lab-create source, lab-prepare, lab-launch, lab-run-auto, lab-run RUNTIME ENTRYPOINT [ARGS...], lab-run-json JSON, lab-status, lab-select VALUE, lab-snapshot, lab-reset, lab-stop, lab-teardown, compatibility fixture commands, adapters, adapter-install diagnostic, adapter-stage diagnostic, adapter-complete, adapter-cancel, adapter-status, adapter-run MESSAGE, adapter-remove, manifest, observe PATH [offset=N] [bytes=N], probe PATH [input=LITERAL], jobs, job ID, job-log ID STREAM [offset=N] [bytes=N], job-cancel ID, findings, patches, report, report-json, sarif, bundle, revoke, compatibility, contract, or checkpoint.",
         &host,
         actions(&state),
         None,
@@ -1734,6 +1739,13 @@ fn actions(state: &State) -> Vec<ModuleMenuAction> {
             action("Run contained proof", "probe ", false),
             action("Revoke source", "revoke", true),
         ]);
+        if journey::diamond_source_observed(state) {
+            result.extend([
+                action("Diamond application binding", "diamond", true),
+                action("Install Diamond application binding", "diamond-install", true),
+                action("Run complete Diamond campaign", "diamond-run", true),
+            ]);
+        }
         if !investigation_started {
             result.extend([
                 action("Contained jobs", "jobs", true),

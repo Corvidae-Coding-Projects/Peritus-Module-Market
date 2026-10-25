@@ -278,6 +278,9 @@ pub(crate) fn admit(
             if receipt.operation == crate::attack_graph::OPERATION {
                 return crate::attack_graph::admit(parameters, profile, state, receipt);
             }
+            if receipt.operation == crate::diamond_binding::OPERATION {
+                return crate::diamond_binding::admit(parameters, profile, state, receipt);
+            }
             format!(
                 "# Diagnostic adapter receipt\n\n- Runtime: `{}`\n- Operation: `{}`\n- Input digest: `{}`\n- Receipt decoder: `{}`\n- Executed by: `{}`\n\n```json\n{}\n```",
                 receipt.runtime_digest,
@@ -448,7 +451,9 @@ fn worker_runtime_features(pending: &PendingRequest) -> Vec<String> {
     };
     if matches!(
         request.runtime.adapter_id.as_str(),
-        crate::browser_client::ADAPTER_ID | crate::attack_graph::ADAPTER_ID
+        crate::browser_client::ADAPTER_ID
+            | crate::attack_graph::ADAPTER_ID
+            | crate::diamond_binding::ADAPTER_ID
     ) {
         vec![MODULE_WORKER_FEATURE_BROWSER_AUTOMATION.into()]
     } else {

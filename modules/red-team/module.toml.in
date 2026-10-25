@@ -2,7 +2,7 @@
 # This file is deliberately not a runnable package manifest and is not listed in market.toml.
 schema = 1
 id = "peritus.red-team"
-version = "0.16.7"
+version = "0.16.8"
 name = "Red Team"
 description = "Authorized defensive source investigation with a durable complete-campaign journey, static analysis, contained HTTP/API, isolated real-browser, module-private identity/access, file/archive/parser/native-fault, workflow/concurrency, network/TLS/authority probes, receipt-backed attack graphs, copy-only repair replay, and SARIF export."
 resources = [
@@ -28,6 +28,7 @@ resources = [
   "resources/phase20-state-v18.json",
   "resources/browser_campaign.py",
   "resources/attack_graph_browser.py",
+  "resources/diamond_browser_campaign.py",
   "corpus/LICENSE",
   "corpus/README.md",
   "corpus/known-disclosure/vulnerable.sh",
@@ -118,6 +119,7 @@ resources = [
   "src/browser_client.rs",
   "src/boundary_authority.rs",
   "src/coverage.rs",
+  "src/diamond_binding.rs",
   "src/http_api.rs",
   "src/identity_access.rs",
   "src/file_fuzz.rs",
@@ -133,6 +135,7 @@ resources = [
   "src/runtime_laboratory.rs",
   "src/runtime_browser.rs",
   "src/runtime_browser_client.rs",
+  "src/runtime_diamond.rs",
   "src/runtime_http_api.rs",
   "src/runtime_identity_access.rs",
   "src/runtime_file_fuzz.rs",

@@ -156,7 +156,11 @@ fn validate_observation(
 ) -> Result<(), Error> {
     if observation.schema != 1
         || observation.adapter_version != "peritus-boundary-authority-2026-10-24.5"
-        || observation.suite_version != "peritus-boundary-authority-suite-2026-10-24.1"
+        || !matches!(
+            observation.suite_version.as_str(),
+            "peritus-boundary-authority-suite-2026-10-24.1"
+                | "peritus-boundary-authority-diamond-2026-10-25.1"
+        )
         || observation.campaign_digest.len() != 64
         || observation.final_state_digest.len() != 64
         || observation.operations_executed == 0

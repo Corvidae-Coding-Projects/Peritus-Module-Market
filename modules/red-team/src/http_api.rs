@@ -156,7 +156,10 @@ fn validate_observation(
 ) -> Result<(), Error> {
     if observation.schema != 1
         || observation.adapter_version != "peritus-http-api-2026-10-24.1"
-        || observation.suite_version != "peritus-http-api-suite-2026-10-24.1"
+        || !matches!(
+            observation.suite_version.as_str(),
+            "peritus-http-api-suite-2026-10-24.1" | "peritus-http-api-diamond-2026-10-25.1"
+        )
         || observation.traffic_digest.len() != 64
         || observation.requests_executed
             != u64::try_from(observation.cases.len()).unwrap_or(u64::MAX)

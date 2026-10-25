@@ -123,13 +123,26 @@ pub(crate) fn admit(
         campaign: state.campaign.id.clone(),
         scope_revision: scope.id.clone(),
         kind: EvidenceKind::AttackGraph,
-        observation: format!(
-            "Module-owned attack-graph adapter retained {} nodes, {} edges, {} searched chains, a counterfactual, and {} accepted repair replays across exact source, private HTTP, and a real isolated browser",
-            observation.nodes.len(),
-            observation.edges.len(),
-            observation.chains.len(),
-            observation.repair.replays.len(),
-        ),
+        observation: if observation
+            .chains
+            .iter()
+            .any(|chain| chain.disposition == ModuleAttackGraphDisposition::Confirmed)
+        {
+            format!(
+                "Module-owned attack-graph adapter retained {} nodes, {} edges, {} searched chains, a counterfactual, and {} accepted repair replays across exact source, private HTTP, and a real isolated browser",
+                observation.nodes.len(),
+                observation.edges.len(),
+                observation.chains.len(),
+                observation.repair.replays.len(),
+            )
+        } else {
+            format!(
+                "Module-owned attack-graph adapter retained {} nodes, {} edges, and {} searched chains; no fully supported impact chain was confirmed, so no repair was fabricated",
+                observation.nodes.len(),
+                observation.edges.len(),
+                observation.chains.len(),
+            )
+        },
         artifact_digest: observation.campaign_digest.clone(),
         dependencies: vec![snapshot.id.clone()],
     };
@@ -190,7 +203,10 @@ fn validate_observation(
 ) -> Result<(), Error> {
     if observation.schema != 1
         || observation.adapter_version != "peritus-attack-graph-2026-10-24.1"
-        || observation.suite_version != "peritus-attack-graph-suite-2026-10-24.1"
+        || !matches!(
+            observation.suite_version.as_str(),
+            "peritus-attack-graph-suite-2026-10-24.1" | "peritus-attack-graph-diamond-2026-10-25.1"
+        )
         || observation.campaign_digest.len() != 64
         || observation.operations_executed == 0
     {
@@ -215,10 +231,6 @@ fn validate_observation(
             return Err(invalid("attack-graph observation names a non-ready or stale laboratory"));
         }
     }
-    if observation.vulnerable_laboratory_id == observation.repaired_laboratory_id {
-        return Err(invalid("attack-graph observation reused one laboratory as both twins"));
-    }
-
     let nodes = observation.nodes.iter().map(|node| node.id.as_str()).collect::<BTreeSet<_>>();
     let edges = observation.edges.iter().map(|edge| edge.id.as_str()).collect::<BTreeSet<_>>();
     if nodes.len() != observation.nodes.len() || edges.len() != observation.edges.len() {
@@ -255,9 +267,9 @@ fn validate_observation(
     let confirmed = observation
         .chains
         .iter()
-        .find(|chain| chain.disposition == ModuleAttackGraphDisposition::Confirmed)
-        .ok_or_else(|| invalid("attack graph has no confirmed chain"))?;
-    if confirmed.adapter_families.iter().collect::<BTreeSet<_>>().len() < 3
+        .find(|chain| chain.disposition == ModuleAttackGraphDisposition::Confirmed);
+    if confirmed
+        .is_some_and(|chain| chain.adapter_families.iter().collect::<BTreeSet<_>>().len() < 3)
         || !observation
             .chains
             .iter()
@@ -268,8 +280,13 @@ fn validate_observation(
             .any(|chain| chain.disposition == ModuleAttackGraphDisposition::Rejected)
     {
         return Err(invalid(
-            "attack graph omitted its three-family, counterfactual, or rejection proof",
+            "attack graph omitted its three-family confirmed-chain proof, counterfactual, or rejection record",
         ));
+    }
+    if confirmed.is_some()
+        && observation.vulnerable_laboratory_id == observation.repaired_laboratory_id
+    {
+        return Err(invalid("confirmed attack graph reused one laboratory as both twins"));
     }
     let supported_evidence = observation
         .nodes
@@ -305,6 +322,17 @@ fn validate_observation(
         return Err(invalid("attack-graph skeptic did not independently bind its decision"));
     }
     let repair = &observation.repair;
+    if confirmed.is_none() {
+        if !repair.target_path.is_empty()
+            || !repair.diff_bytes.is_empty()
+            || !repair.addressed_chains.is_empty()
+            || !repair.replays.is_empty()
+            || repair.review_accepted
+        {
+            return Err(invalid("attack graph without a confirmed chain fabricated a repair"));
+        }
+        return Ok(());
+    }
     let replay_adapters =
         repair.replays.iter().map(|replay| replay.adapter_id.as_str()).collect::<BTreeSet<_>>();
     if repair.target_path.is_empty()
@@ -369,7 +397,7 @@ fn render(
 
 fn view(state: &state::State) -> String {
     format!(
-        "# Cross-adapter attack graph\n\n- Registered adapter: `{ADAPTER_ID}`\n- Operation: `{OPERATION}`\n- Installed: {}\n- Retained campaigns: {}\n\nThe module searches only receipt-supported edges across exact source, private HTTP, and isolated-browser evidence. It retains counterfactual and rejected paths, groups root causes without erasing distinct entry points or impacts, and hands back an exact copy-only patch plus adapter-specific replays.",
+        "# Cross-adapter attack graph\n\n- Registered adapter: `{ADAPTER_ID}`\n- Operation: `{OPERATION}`\n- Installed: {}\n- Retained campaigns: {}\n\nThe module searches only receipt-supported edges across exact source, private HTTP, and isolated-browser evidence. It retains counterfactual and rejected paths and groups root causes without erasing distinct entry points or impacts. It hands back an exact copy-only patch plus adapter-specific replays only when a supported impact chain is confirmed; otherwise it records the bounded negative result without fabricating a repair.",
         adapter::installed_runtime(state, ADAPTER_ID).is_some(),
         state.attack_graph_observations.len(),
     )

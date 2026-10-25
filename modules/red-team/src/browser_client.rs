@@ -156,7 +156,11 @@ fn validate_observation(
 ) -> Result<(), Error> {
     if observation.schema != 1
         || observation.adapter_version != "peritus-browser-client-2026-10-24.1"
-        || observation.suite_version != "peritus-browser-client-suite-2026-10-24.1"
+        || !matches!(
+            observation.suite_version.as_str(),
+            "peritus-browser-client-suite-2026-10-24.1"
+                | "peritus-browser-client-diamond-2026-10-25.1"
+        )
         || observation.traffic_digest.len() != 64
         || !observation.context_isolation_observed
         || observation.off_scope_requests_blocked == 0
