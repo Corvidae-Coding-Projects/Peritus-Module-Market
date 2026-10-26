@@ -1,5 +1,34 @@
 # Red Team real-interface evidence
 
+## 2026-10-26 read-only Bun cache recovery
+
+The `0.17.4` module executable was driven through its native worker boundary against three fresh
+disposable copies of `/home/doll/flt/Comms`. Each copy excluded `.git`, `node_modules`, generated
+output, and prior worker state. Bubblewrap exposed the host filesystem and prepared Bun package
+cache read-only while leaving only the disposable application copy writable.
+
+Two unmodified copies independently installed the exact locked dependencies without writing to the
+shared cache. Each launched the real Bun service, executed 12 raw HTTP exchanges and 3 Chromium
+actions, exercised all seven common surfaces, reported no applicability gaps or findings, and
+confirmed process cleanup. The package-cache inventory digest was unchanged across execution.
+
+A third copy deliberately removed only Comms' `x-mistake-adapter` authorization check. The same
+campaign produced two runtime-confirmed high-severity findings: the direct cross-adapter authority
+request and the resulting cross-surface authority attack-graph chain. This paired negative oracle
+demonstrates that the successful runs did not merely accept every observed response.
+
+The original Comms checkout retained the same Git status, tracked-diff digest, and hashes for its
+pre-existing modified and untracked documentation before and after all three campaigns.
+
+Retained local replay outputs:
+
+- `/tmp/peritus-comms-0174-safe.json`
+- `/tmp/peritus-comms-0174-repeat.json`
+- `/tmp/peritus-comms-0174-mutant.json`
+- `/tmp/peritus-comms-0174-safe-request.json`
+- `/tmp/peritus-comms-0174-repeat-request.json`
+- `/tmp/peritus-comms-0174-mutant-request.json`
+
 ## 2026-10-26 generic application campaign
 
 The `0.17.0` module executable was driven through its real native worker boundary against

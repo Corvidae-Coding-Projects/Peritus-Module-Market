@@ -1031,7 +1031,11 @@ fn prepare_runtime(
     fs::create_dir_all(&temporary)
         .map_err(|error| format!("create disposable Bun temporary directory: {error}"))?;
     let output = Command::new(&bun)
-        .args(["install", "--frozen-lockfile", "--ignore-scripts", "--cache-dir"])
+        // The host projects its prepared package cache read-only. Bun normally creates a
+        // temporary manifest entry and renames it into that cache even when every package is
+        // already present. `--no-cache` suppresses those cache mutations while the explicit
+        // cache directory remains available for pinned package payload reads.
+        .args(["install", "--frozen-lockfile", "--ignore-scripts", "--no-cache", "--cache-dir"])
         .arg(cache)
         .current_dir(root)
         .env_clear()
