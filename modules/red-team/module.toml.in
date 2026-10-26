@@ -2,7 +2,7 @@
 # This file is deliberately not a runnable package manifest and is not listed in market.toml.
 schema = 1
 id = "peritus.red-team"
-version = "0.17.2"
+version = "0.17.3"
 name = "Red Team"
 description = "Authorized defensive source investigation with a durable complete-campaign journey, static analysis, contained HTTP/API, isolated real-browser, module-private identity/access, file/archive/parser/native-fault, workflow/concurrency, network/TLS/authority probes, receipt-backed attack graphs, copy-only repair replay, and SARIF export."
 resources = [

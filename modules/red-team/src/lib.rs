@@ -763,10 +763,15 @@ fn host_result(parameters: &Value) -> Result<ModuleAction, Error> {
         return Err(invalid("host_result does not match the retained host-service request"));
     }
     let host = profile(parameters);
+    // A matching host result is terminal for the retained request even when its
+    // payload is invalid. Persist that transition before decoding or admitting
+    // result bytes so a malformed/failed worker can never strand every later
+    // action behind an already-completed request.
+    state.pending = None;
+    state::save(parameters, &state)?;
     let output = match result.outcome {
         ModuleHostOutcome::Success { output } => output,
         ModuleHostOutcome::Unsupported { detail } => {
-            state.pending = None;
             if expected_capability == HOST_CAPABILITY_WORKER {
                 state.adapter_errors.push(format!("unsupported: {detail}"));
             }
@@ -794,7 +799,6 @@ fn host_result(parameters: &Value) -> Result<ModuleAction, Error> {
             ));
         }
         ModuleHostOutcome::Rejected { code, detail } => {
-            state.pending = None;
             if expected_capability == HOST_CAPABILITY_WORKER {
                 state.adapter_errors.push(format!("{code}: {detail}"));
             }
@@ -826,7 +830,6 @@ fn host_result(parameters: &Value) -> Result<ModuleAction, Error> {
             ));
         }
         ModuleHostOutcome::Failed { code, detail, retryable_with_new_action } => {
-            state.pending = None;
             if expected_capability == HOST_CAPABILITY_WORKER {
                 state.adapter_errors.push(format!("{code}: {detail}"));
             }
@@ -866,7 +869,19 @@ fn host_result(parameters: &Value) -> Result<ModuleAction, Error> {
         }
     };
     if expected_capability == HOST_CAPABILITY_WORKER {
-        let worker: ModuleWorkerResult = serde_json::from_value(output)?;
+        let worker: ModuleWorkerResult = match serde_json::from_value(output) {
+            Ok(worker) => worker,
+            Err(error) => {
+                return terminal_worker_failure(
+                    parameters,
+                    &host,
+                    &mut state,
+                    &pending,
+                    &result.key,
+                    format!("worker result could not be decoded: {error}"),
+                );
+            }
+        };
         let expected_worker = if matches!(pending, PendingRequest::JobSubmit { .. }) {
             "proof-job"
         } else {
@@ -882,16 +897,35 @@ fn host_result(parameters: &Value) -> Result<ModuleAction, Error> {
         {
             let stderr = String::from_utf8_lossy(&worker.stderr);
             let stderr = stderr.chars().take(2_048).collect::<String>();
-            return Err(invalid(format!(
-                "module worker `{}` failed: exit={:?}, cleanup={}, original_source_unchanged={}, plan_digest_bytes={}, stderr={stderr:?}",
-                worker.worker,
-                worker.exit_code,
-                worker.cleanup_complete,
-                worker.original_source_unchanged,
-                worker.execution_plan_digest.len(),
-            )));
+            return terminal_worker_failure(
+                parameters,
+                &host,
+                &mut state,
+                &pending,
+                &result.key,
+                format!(
+                    "module worker `{}` failed: exit={:?}, cleanup={}, original_source_unchanged={}, plan_digest_bytes={}, stderr={stderr:?}",
+                    worker.worker,
+                    worker.exit_code,
+                    worker.cleanup_complete,
+                    worker.original_source_unchanged,
+                    worker.execution_plan_digest.len(),
+                ),
+            );
         }
-        let output = serde_json::from_slice(&worker.stdout)?;
+        let output = match serde_json::from_slice(&worker.stdout) {
+            Ok(output) => output,
+            Err(error) => {
+                return terminal_worker_failure(
+                    parameters,
+                    &host,
+                    &mut state,
+                    &pending,
+                    &result.key,
+                    format!("worker stdout could not be decoded: {error}"),
+                );
+            }
+        };
         if expected_worker == "adapter-runtime" {
             return adapter::admit(parameters, &host, &mut state, pending, output);
         }
@@ -1086,6 +1120,37 @@ fn host_result(parameters: &Value) -> Result<ModuleAction, Error> {
     state.pending = None;
     state::save(parameters, &state)?;
     Ok(reply(text, &host, actions(&state), None))
+}
+
+fn terminal_worker_failure(
+    parameters: &Value,
+    host: &Option<ModuleHostProfile>,
+    state: &mut State,
+    pending: &PendingRequest,
+    result_key: &str,
+    detail: String,
+) -> Result<ModuleAction, Error> {
+    state.pending = None;
+    state.adapter_errors.push(detail.clone());
+    if result_key.starts_with("red-team-repair-") {
+        repair::host_failure(state, &detail);
+        state::save(parameters, state)?;
+        return repair::next(parameters, host, state);
+    }
+    if result_key.starts_with("red-team-investigation-") {
+        investigation::host_failure(state, pending, &detail);
+        state::save(parameters, state)?;
+        return investigation::next(parameters, host, state);
+    }
+    state::save(parameters, state)?;
+    Ok(reply(
+        format!(
+            "The contained module worker failed and its incomplete result was rejected. The request is closed, so cleanup, teardown, retry, and a new campaign remain available.\n\n{detail}"
+        ),
+        host,
+        actions(state),
+        None,
+    ))
 }
 
 fn pending_capability(pending: &PendingRequest) -> &'static str {
