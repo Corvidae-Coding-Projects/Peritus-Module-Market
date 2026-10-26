@@ -248,12 +248,12 @@ fn model(state: &State, role: &str) -> Result<ModuleAction, Error> {
         "discovery" => (
             "writer",
             "Red Team · hypothesis discovery",
-            "Inspect the committed inventory and retained hypothesis index exactly once, then commit missing small falsifiable hypotheses with red_team_discovery_commit in batches of at most six. Set complete=false while another batch remains and complete=true on the final batch. Every accepted batch ends the provider request and is durable before the next fresh turn, so on recovery add only missing work. The inventory view is already compact and authoritative; do not request coverage or source again unless one specific missing fact is necessary. Do not rediscover the repository or reread an unchanged range within this role. Distinguish known-description reproduction from unknown discovery. The generic disposable-process method proves only canary nondisclosure on a command-line or native surface mapped to ASVS 5.0.0 V14.2.6 or CWE 4.18 CWE-200. For that method, name the runtime, immutable source-manifest entry point, exact literal argv vector, optional stdin, exact non-secret environment, and changed dimension; place `{{PERITUS_CANARY}}` in at least one delivered argv, stdin, or environment value. For every hypothesis requiring an HTTP client/server exchange, identity provisioning, protocol choreography, concurrency, filesystem mutation, or any oracle other than canary nondisclosure, set runtime and target_path to null and leave argv, stdin, and environment empty: it is analysis-only until a compatible class adapter exists. Use runtime `direct` for a checked-in executable, `cargo` with Cargo.toml for Rust, or the corresponding declared interpreter/runtime. Derive argv from the observed application interface; do not prepend a source path or collapse multiple arguments into one string. Never encode a shell command, credential, connection string, or host path. Prefer the transactional batch commit over one-at-a-time registration.",
+            "Inspect the committed inventory and retained hypothesis index exactly once, then commit missing small falsifiable hypotheses with red_team_discovery_commit in batches of at most six. Set complete=false while another batch remains and complete=true on the final batch. Every accepted batch ends the provider request and is durable before the next fresh turn, so on recovery add only missing work. The inventory view is already compact and authoritative; do not request coverage or source again unless one specific missing fact is necessary. Do not rediscover the repository or reread an unchanged range within this role. Distinguish known-description reproduction from unknown discovery. The generic disposable-process method proves only canary nondisclosure on a command-line or native surface mapped to ASVS 5.0.0 V14.2.6 or CWE 4.18 CWE-200. For that method, name the runtime, immutable source-manifest entry point, exact literal argv vector, optional stdin, exact non-secret environment, and changed dimension; place `{{PERITUS_CANARY}}` in at least one delivered argv, stdin, or environment value. For hypotheses requiring HTTP, browser, identity, parser, workflow, state, or boundary behavior, set runtime and target_path to null and leave argv, stdin, and environment empty. The coordinator will launch the scoped application and execute the generic multi-surface campaign, with a first-class profile when recognized; null does not mean source-only. Use runtime `direct` for a checked-in executable, `cargo` with Cargo.toml for Rust, `bun` with package.json for Bun, or the corresponding declared interpreter/runtime. Derive argv from the observed application interface; do not prepend a source path or collapse multiple arguments into one string. Never encode a shell command, credential, connection string, or host path. Prefer the transactional batch commit over one-at-a-time registration.",
         ),
         "skeptic" => (
             "reviewer",
             "Red Team · independent skeptical adjudication",
-            "You have a separate reviewer context. Inspect the hypothesis index once, then call red_team_inspect(kind=evidence) once for the next exact bundle of at most six unadjudicated hypotheses. Challenge reachability, prerequisites, oracle, impact, target identity and counterevidence. An unsuccessful attempt is not a refutation. Save decisions with red_team_review_commit, setting complete=false while another bundle remains and complete=true on the final batch. Every accepted batch ends the provider request and is durable before the next fresh turn. On recovery, adjudicate only hypotheses without a retained finding.",
+            "You have a separate reviewer context. Inspect the hypothesis index once, then call red_team_inspect(kind=evidence) once for the next exact bundle of at most six unadjudicated hypotheses. Challenge reachability, prerequisites, oracle, impact, target identity and counterevidence. Treat generic application observations as real but bounded runtime evidence: correlate exact case family, operation, oracle, and finding to the hypothesis. An unsuccessful generic attack is not a refutation. Save decisions with red_team_review_commit, setting complete=false while another bundle remains and complete=true on the final batch. Every accepted batch ends the provider request and is durable before the next fresh turn. On recovery, adjudicate only hypotheses without a retained finding.",
         ),
         _ => return Err(invalid("unknown investigation role")),
     };
@@ -327,7 +327,7 @@ fn functions(state: &State, role: &str) -> Vec<ModuleFunction> {
             ),
             function(
                 "red_team_hypothesis_register",
-                "Compatibility path for registering one falsifiable hypothesis before execution. Prefer red_team_discovery_commit. A null target_path records analysis-only or blocked work; it cannot become runtime-confirmed.",
+                "Compatibility path for registering one falsifiable hypothesis before execution. Prefer red_team_discovery_commit. A null target_path routes web and application behavior through the generic multi-surface runtime campaign.",
                 hypothesis_schema(state),
             ),
             function(
@@ -379,7 +379,7 @@ fn hypothesis_schema(state: &State) -> Value {
         .current_observations()
         .map(|observation| observation.record.id.value.clone())
         .collect::<Vec<_>>();
-    json!({"type":"object","additionalProperties":false,"properties":{"family":{"type":"string","enum":security_families()},"origin":{"type":"string","enum":["known_description","unknown_discovery"]},"attacker":{"type":"string","minLength":1,"maxLength":4096},"entry_point":{"type":"string","enum":entry_points,"description":"Exact compiled surface name or exact entry_point from the committed inventory."},"prerequisites":{"type":"array","maxItems":64,"items":{"type":"string","minLength":1,"maxLength":4096}},"security_property":{"type":"string","enum":security_properties,"description":"Exact compiled security-property identifier whose family matches this hypothesis."},"falsifiable_observation":{"type":"string","minLength":1,"maxLength":4096},"source_evidence":{"type":"array","minItems":1,"maxItems":128,"items":{"type":"string","enum":evidence,"description":"Exact current evidence_id returned by inventory or a source-observation handoff."}},"runtime":{"enum":[null,"direct","python3","node","bash","ruby","php","perl","cargo","go","java","dotnet","make"],"description":"Generic canary-nondisclosure runtime. Use null with null target_path for every hypothesis that needs another runtime adapter."},"target_path":{"type":["string","null"],"maxLength":4096,"description":"Exact source-manifest entry point for a canary-nondisclosure process, or null for analysis-only work. Never name a generated build output."},"arguments":{"type":"array","maxItems":64,"description":"Exact literal application argv after the runtime launcher. Do not include the runtime, manifest, or shell syntax. Executable plans must deliver {{PERITUS_CANARY}} in argv, stdin, or environment.","items":{"type":"string","maxLength":16384}},"stdin":{"type":["string","null"],"maxLength":65536,"description":"Exact stdin bytes as UTF-8 text, or null. Executable plans must deliver {{PERITUS_CANARY}} in argv, stdin, or environment."},"environment":{"type":"object","maxProperties":64,"propertyNames":{"pattern":"^[A-Za-z_][A-Za-z0-9_]{0,127}$"},"additionalProperties":{"type":"string","maxLength":65536},"description":"Exact non-secret environment values for the disposable process. Executable plans must deliver {{PERITUS_CANARY}} in argv, stdin, or environment; never include credentials or connection strings."},"changed_dimension":{"type":"string","minLength":1,"maxLength":4096}},"required":["family","origin","attacker","entry_point","prerequisites","security_property","falsifiable_observation","source_evidence","runtime","target_path","arguments","stdin","environment","changed_dimension"]})
+    json!({"type":"object","additionalProperties":false,"properties":{"family":{"type":"string","enum":security_families()},"origin":{"type":"string","enum":["known_description","unknown_discovery"]},"attacker":{"type":"string","minLength":1,"maxLength":4096},"entry_point":{"type":"string","enum":entry_points,"description":"Exact compiled surface name or exact entry_point from the committed inventory."},"prerequisites":{"type":"array","maxItems":64,"items":{"type":"string","minLength":1,"maxLength":4096}},"security_property":{"type":"string","enum":security_properties,"description":"Exact compiled security-property identifier whose family matches this hypothesis."},"falsifiable_observation":{"type":"string","minLength":1,"maxLength":4096},"source_evidence":{"type":"array","minItems":1,"maxItems":128,"items":{"type":"string","enum":evidence,"description":"Exact current evidence_id returned by inventory or a source-observation handoff."}},"runtime":{"enum":[null,"direct","python3","node","bun","bash","ruby","php","perl","cargo","go","java","dotnet","make"],"description":"Generic canary-nondisclosure runtime. Use null with null target_path for application interfaces handled by the generic multi-surface campaign."},"target_path":{"type":["string","null"],"maxLength":4096,"description":"Exact source-manifest entry point for a canary-nondisclosure process, or null for a generic application campaign. Never name a generated build output."},"arguments":{"type":"array","maxItems":64,"description":"Exact literal application argv after the runtime launcher. Do not include the runtime, manifest, or shell syntax. Executable plans must deliver {{PERITUS_CANARY}} in argv, stdin, or environment.","items":{"type":"string","maxLength":16384}},"stdin":{"type":["string","null"],"maxLength":65536,"description":"Exact stdin bytes as UTF-8 text, or null. Executable plans must deliver {{PERITUS_CANARY}} in argv, stdin, or environment."},"environment":{"type":"object","maxProperties":64,"propertyNames":{"pattern":"^[A-Za-z_][A-Za-z0-9_]{0,127}$"},"additionalProperties":{"type":"string","maxLength":65536},"description":"Exact non-secret environment values for the disposable process. Executable plans must deliver {{PERITUS_CANARY}} in argv, stdin, or environment; never include credentials or connection strings."},"changed_dimension":{"type":"string","minLength":1,"maxLength":4096}},"required":["family","origin","attacker","entry_point","prerequisites","security_property","falsifiable_observation","source_evidence","runtime","target_path","arguments","stdin","environment","changed_dimension"]})
 }
 
 fn inventory_schema() -> Value {
@@ -649,6 +649,26 @@ fn evidence_bundle(state: &State, hypothesis_id: &str) -> Result<Value, Error> {
             )
         })
     });
+    let application_cases = plan
+        .map(|plan| {
+            state
+                .application_observations
+                .iter()
+                .flat_map(|observation| observation.cases.iter().chain(&observation.browser_cases))
+                .filter(|case| case.class == plan.family)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let application_findings = plan
+        .map(|plan| {
+            state
+                .application_observations
+                .iter()
+                .flat_map(|observation| &observation.findings)
+                .filter(|finding| finding.class == plan.family)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
     Ok(json!({
         "hypothesis":state.hypotheses.iter().find(|record|record.id.value==hypothesis_id),
         "plan":plan,
@@ -657,6 +677,9 @@ fn evidence_bundle(state: &State, hypothesis_id: &str) -> Result<Value, Error> {
         "receipts":receipts,
         "expected_canary":expected_canary,
         "laboratory_observations":state.laboratory_receipts.iter().filter(|receipt|request_digests.contains(receipt.request_digest.as_str())).map(laboratory_observation_summary).collect::<Vec<_>>(),
+        "generic_application_cases":application_cases,
+        "generic_application_findings":application_findings,
+        "generic_application_evidence":state.application_evidence,
         "finding":state.findings.iter().find(|finding|finding.hypothesis_id==hypothesis_id),
         "reviews":state.reviews.iter().filter(|review|state.findings.iter().any(|finding|finding.hypothesis_id==hypothesis_id && review.subject==finding.id)).collect::<Vec<_>>(),
     }))
@@ -902,7 +925,7 @@ fn register_hypothesis(state: &mut State, arguments: &Value) -> Result<Value, Er
             || input.attacker_input.is_some())
     {
         return Err(invalid(
-            "analysis-only hypotheses cannot carry argv, stdin, environment, or legacy attacker input",
+            "generic application hypotheses cannot carry process argv, stdin, environment, or legacy attacker input",
         ));
     }
     if let Some(runtime) = &input.runtime
@@ -911,6 +934,7 @@ fn register_hypothesis(state: &mut State, arguments: &Value) -> Result<Value, Er
             "direct"
                 | "python3"
                 | "node"
+                | "bun"
                 | "bash"
                 | "ruby"
                 | "php"
@@ -995,7 +1019,7 @@ fn register_hypothesis(state: &mut State, arguments: &Value) -> Result<Value, Er
         });
         if !canary_delivered || !canary_property {
             return Err(invalid(
-                "generic executable probes are limited to canary nondisclosure: map the property to ASVS 5.0.0 V14.2.6 or CWE 4.18 CWE-200 and deliver {{PERITUS_CANARY}} in argv, stdin, or environment; otherwise record an analysis-only hypothesis with null runtime and target_path",
+                "generic executable probes are limited to canary nondisclosure: map the property to ASVS 5.0.0 V14.2.6 or CWE 4.18 CWE-200 and deliver {{PERITUS_CANARY}} in argv, stdin, or environment; otherwise use null runtime and target_path for the generic application campaign",
             ));
         }
     }
@@ -1164,6 +1188,60 @@ fn schedule_probe(
             })
     });
     let Some(plan) = next_plan.cloned() else {
+        let needs_application_campaign = crate::application_binding::source_observed(state)
+            && state.investigation.hypothesis_plans.iter().any(|plan| plan.target_path.is_none())
+            && !state.application_observations.iter().any(|observation| {
+                state
+                    .active_snapshot()
+                    .is_some_and(|snapshot| observation.source_snapshot == snapshot.snapshot_digest)
+            });
+        if needs_application_campaign {
+            if crate::adapter::installed_runtime(state, crate::application_binding::ADAPTER_ID)
+                .is_none()
+            {
+                state.application_campaign_pending = true;
+                return crate::adapter::install(
+                    parameters,
+                    state,
+                    crate::application_binding::ADAPTER_ID,
+                );
+            }
+            let Some(status) = investigation_laboratory(state).cloned() else {
+                return crate::laboratory::investigation_create_source(parameters, state);
+            };
+            let laboratory_id = status.handle.laboratory_id.clone();
+            return match status.phase {
+                ModuleLaboratoryPhase::Created => crate::laboratory::investigation_lifecycle(
+                    parameters,
+                    state,
+                    &laboratory_id,
+                    "prepare",
+                ),
+                ModuleLaboratoryPhase::Prepared | ModuleLaboratoryPhase::Stopped => {
+                    crate::laboratory::investigation_lifecycle(
+                        parameters,
+                        state,
+                        &laboratory_id,
+                        "launch",
+                    )
+                }
+                ModuleLaboratoryPhase::Ready => {
+                    state.application_campaign_pending = true;
+                    crate::application_binding::execute(parameters, state)
+                }
+                ModuleLaboratoryPhase::Failed | ModuleLaboratoryPhase::Quarantined => {
+                    crate::laboratory::investigation_lifecycle(
+                        parameters,
+                        state,
+                        &laboratory_id,
+                        "teardown",
+                    )
+                }
+                ModuleLaboratoryPhase::TornDown => {
+                    crate::laboratory::investigation_create_source(parameters, state)
+                }
+            };
+        }
         if let Some(status) = investigation_laboratory(state) {
             let laboratory_id = status.handle.laboratory_id.clone();
             return match status.phase {
@@ -1643,12 +1721,26 @@ fn adjudicate(state: &mut State, arguments: &Value) -> Result<Value, Error> {
     let violation = receipts
         .iter()
         .any(|receipt| matches!(receipt.verdict, ModuleJobVerdict::ViolationObserved));
+    let application_violation = state
+        .investigation
+        .hypothesis_plans
+        .iter()
+        .find(|plan| plan.hypothesis_id == input.hypothesis_id)
+        .is_some_and(|plan| {
+            state
+                .application_observations
+                .iter()
+                .flat_map(|observation| &observation.findings)
+                .any(|finding| finding.class == plan.family)
+        });
     let held = receipts
         .iter()
         .any(|receipt| matches!(receipt.verdict, ModuleJobVerdict::PropertyHeldForCase));
     match classification {
-        FindingClassification::Confirmed if !violation => {
-            return Err(invalid("confirmed requires a trusted violation-observed receipt"));
+        FindingClassification::Confirmed if !violation && !application_violation => {
+            return Err(invalid(
+                "confirmed requires a trusted violation-observed receipt or a family-matched generic application finding",
+            ));
         }
         FindingClassification::Refuted
             if input.counterevidence.trim().is_empty() || evidence.is_empty() =>
@@ -1798,6 +1890,11 @@ fn evidence_ids(state: &State, values: &[String]) -> Result<Vec<RecordId>, Error
             .iter()
             .find(|item| item.id.value == *value)
             .map(|item| item.id.clone());
+        let exact_application = state
+            .application_evidence
+            .iter()
+            .find(|item| item.id.value == *value || item.artifact_digest == *value)
+            .map(|item| item.id.clone());
         let mut aliases = state
             .observations
             .iter()
@@ -1807,7 +1904,7 @@ fn evidence_ids(state: &State, values: &[String]) -> Result<Vec<RecordId>, Error
             .collect::<Vec<_>>();
         aliases.sort_by(|left, right| left.value.cmp(&right.value));
         aliases.dedup();
-        let id = match (exact_source.or(exact_job), aliases.as_slice()) {
+        let id = match (exact_source.or(exact_job).or(exact_application), aliases.as_slice()) {
             (Some(id), _) => id,
             (None, [id]) => id.clone(),
             (None, []) => {

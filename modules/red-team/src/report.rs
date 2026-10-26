@@ -51,6 +51,8 @@ struct ReportSnapshot<'a> {
     boundary_evidence: &'a [EvidenceRecord],
     attack_graph_observations: &'a [peritus_plugin_sdk::ModuleAttackGraphObservation],
     attack_graph_evidence: &'a [EvidenceRecord],
+    application_observations: &'a [crate::application_binding::ApplicationCampaign],
+    application_evidence: &'a [EvidenceRecord],
     laboratory_statuses: &'a [peritus_plugin_sdk::ModuleLaboratoryStatus],
     laboratory_receipts: &'a [peritus_plugin_sdk::ModuleLaboratoryReceipt],
     laboratory_errors: &'a [String],
@@ -92,6 +94,8 @@ struct ReplayBundle<'a> {
     boundary_evidence: &'a [EvidenceRecord],
     attack_graph_observations: &'a [peritus_plugin_sdk::ModuleAttackGraphObservation],
     attack_graph_evidence: &'a [EvidenceRecord],
+    application_observations: &'a [crate::application_binding::ApplicationCampaign],
+    application_evidence: &'a [EvidenceRecord],
     laboratory_statuses: &'a [peritus_plugin_sdk::ModuleLaboratoryStatus],
     laboratory_receipts: &'a [peritus_plugin_sdk::ModuleLaboratoryReceipt],
     laboratory_errors: &'a [String],
@@ -123,9 +127,9 @@ pub(crate) fn publish_report(
     let mut limitations = vec![
         "Coverage is bounded to the recorded source observations, hypotheses, inputs and host receipts; it is not a clean-codebase claim.".into(),
         "An examined family or unsuccessful probe is not evidence that the application is secure.".into(),
-        "The current trusted runtime adapter observes exact canary disclosure. Other interfaces remain analysis-supported, inconclusive, blocked or unexamined unless a suitable module adapter produced evidence.".into(),
+        "The generic application campaign executes bounded HTTP, browser, identity, parser, workflow, boundary, and cross-surface attacks when it can launch the scoped application. An untriggered attack is not evidence that the application is secure.".into(),
         "Patch validation is bounded to the recorded attack, legitimate, malformed and adjacent cases. It is not proof against every input or security property.".into(),
-        "The current application laboratories prove the copied Linux Python key/value and HTTP/API fixture lifecycles. They do not establish coverage for other stacks, stores, operating systems, or unregistered security classes.".into(),
+        "Application laboratories and generic Bun/web execution remain bounded to copied source, available dependencies, loopback interfaces, registered oracles, and Linux isolation. Other runtimes, stores, operating systems, and public-network behavior remain explicit gaps.".into(),
         "The Phase 12 static analyzer provides pinned deterministic source, dependency, secret and configuration leads. Its bounded same-file flow and finite advisory data do not replace compiler-semantic analyzers, full advisory services, or runtime proof.".into(),
         "The Phase 13 HTTP/API adapter covers its pinned HTTP/1.1, live OpenAPI, REST, GraphQL, WebSocket and JSON-RPC suite. HTTP/2, HTTP/3, TLS, arbitrary schema generation, multipart bodies and authentication remain separate gaps.".into(),
         "The Phase 14 browser adapter covers a pinned Chromium client-security suite. Other browser engines and application-specific authenticated workflows remain explicit gaps.".into(),
@@ -202,6 +206,8 @@ pub(crate) fn publish_report(
         boundary_evidence: &state.boundary_evidence,
         attack_graph_observations: &state.attack_graph_observations,
         attack_graph_evidence: &state.attack_graph_evidence,
+        application_observations: &state.application_observations,
+        application_evidence: &state.application_evidence,
         laboratory_statuses: &state.laboratory_statuses,
         laboratory_receipts: &state.laboratory_receipts,
         laboratory_errors: &state.laboratory_errors,
@@ -285,6 +291,8 @@ pub(crate) fn publish_report(
         boundary_evidence: &state.boundary_evidence,
         attack_graph_observations: &state.attack_graph_observations,
         attack_graph_evidence: &state.attack_graph_evidence,
+        application_observations: &state.application_observations,
+        application_evidence: &state.application_evidence,
         laboratory_statuses: &state.laboratory_statuses,
         laboratory_receipts: &state.laboratory_receipts,
         laboratory_errors: &state.laboratory_errors,
@@ -466,7 +474,7 @@ fn markdown(state: &State, limitations: &[String]) -> String {
     let invalidated = state.observations.len().saturating_sub(current);
     let reused = state.observations.iter().map(|observation| observation.reuse_count).sum::<u64>();
     let mut text = format!(
-        "# Red Team investigation and repair report\n\n## Scope and source\n\n- Campaign: `{}`\n- Scope revision: `{}`\n- Source snapshot: `{}`\n- Manifest artifact: `{}`\n- Investigation stage: `{:?}`\n- Repair stage: `{:?}`\n- Complete-journey stage: `{:?}`\n- Complete-journey progress: {}/{}\n- Complete-journey gaps/failures: {}\n- Skill digest: `{}`\n- Provider routes: {}\n- Current source observations: {current}\n- Invalidated source observations: {invalidated}\n- Reused identical observations: {reused}\n- Module worker operations: {}\n- Trusted job receipts: {}\n- Managed-adapter receipts: {}\n- Static-analysis observations: {}\n- HTTP/API observations: {}\n- Real-browser observations: {}\n- Identity/access observations: {}\n- File/parser observations: {}\n- Workflow/state observations: {}\n- Boundary/authority observations: {}\n- Attack-graph observations: {}\n- Application-laboratory receipts: {}\n- Adjudicated findings: {}\n- Patch revisions: {}\n\n",
+        "# Red Team investigation and repair report\n\n## Scope and source\n\n- Campaign: `{}`\n- Scope revision: `{}`\n- Source snapshot: `{}`\n- Manifest artifact: `{}`\n- Investigation stage: `{:?}`\n- Repair stage: `{:?}`\n- Complete-journey stage: `{:?}`\n- Complete-journey progress: {}/{}\n- Complete-journey gaps/failures: {}\n- Skill digest: `{}`\n- Provider routes: {}\n- Current source observations: {current}\n- Invalidated source observations: {invalidated}\n- Reused identical observations: {reused}\n- Module worker operations: {}\n- Trusted job receipts: {}\n- Managed-adapter receipts: {}\n- Static-analysis observations: {}\n- HTTP/API observations: {}\n- Real-browser observations: {}\n- Identity/access observations: {}\n- File/parser observations: {}\n- Workflow/state observations: {}\n- Boundary/authority observations: {}\n- Attack-graph observations: {}\n- Generic application campaigns: {}\n- Application-laboratory receipts: {}\n- Adjudicated findings: {}\n- Patch revisions: {}\n\n",
         state.campaign.id.value,
         scope.map_or("not selected", |record| record.id.value.as_str()),
         snapshot.map_or("not captured", |record| record.snapshot_digest.as_str()),
@@ -504,6 +512,7 @@ fn markdown(state: &State, limitations: &[String]) -> String {
         state.workflow_observations.len(),
         state.boundary_observations.len(),
         state.attack_graph_observations.len(),
+        state.application_observations.len(),
         state.laboratory_receipts.len(),
         state.findings.len(),
         state.patches.len(),
@@ -1014,6 +1023,43 @@ fn markdown(state: &State, limitations: &[String]) -> String {
                 "- `{}` — `{:?}` — `{}` — request `{}` — {}\n",
                 job.host_job_id, job.state, job.operation, job.request_digest, resources
             ));
+        }
+    }
+    text.push_str("\n## Generic source-bound application campaigns\n\nThese campaigns launch the selected application inside the disposable worker and exercise common HTTP, browser, identity, parser, workflow, boundary, and cross-surface attack paths. A held case is bounded to its exact request and oracle.\n\n");
+    if state.application_observations.is_empty() {
+        text.push_str("No generic application campaign has been admitted.\n");
+    }
+    for observation in &state.application_observations {
+        text.push_str(&format!(
+            "### `{}`\n\n- Runtime / entry point: `{}` / `{}`\n- Launch attempted / ready: {} / {}\n- Common surfaces exercised: {}\n- HTTP / browser cases: {} / {}\n- Operations / requests: {} / {}\n- Runtime-confirmed violations: {}\n- Off-scope browser requests blocked: {}\n- Process cleanup: {}\n- Traffic / final state: `{}` / `{}`\n\n",
+            observation.profile,
+            observation.runtime,
+            observation.entrypoint,
+            observation.launch_attempted,
+            observation.ready,
+            observation.surfaces_exercised.join(", "),
+            observation.cases.len(),
+            observation.browser_cases.len(),
+            observation.operations_executed,
+            observation.requests_executed,
+            observation.findings.len(),
+            observation.off_scope_requests_blocked,
+            observation.process_cleanup_complete,
+            observation.traffic_digest,
+            observation.final_state_digest,
+        ));
+        for case in observation.cases.iter().chain(&observation.browser_cases) {
+            text.push_str(&format!(
+                "- `{}` · `{}` · `{}` · status `{}` — {}\n",
+                case.id,
+                case.class,
+                case.disposition,
+                case.response_status.map_or("n/a".into(), |status| status.to_string()),
+                case.oracle,
+            ));
+        }
+        for gap in &observation.gaps {
+            text.push_str(&format!("- Gap: {gap}\n"));
         }
     }
     text.push_str("\n## Disposable application laboratories\n\n");

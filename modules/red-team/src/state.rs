@@ -96,6 +96,12 @@ pub(crate) struct State {
     #[serde(default)]
     pub(crate) attack_graph_evidence: Vec<EvidenceRecord>,
     #[serde(default)]
+    pub(crate) application_observations: Vec<crate::application_binding::ApplicationCampaign>,
+    #[serde(default)]
+    pub(crate) application_evidence: Vec<EvidenceRecord>,
+    #[serde(default)]
+    pub(crate) application_campaign_pending: bool,
+    #[serde(default)]
     pub(crate) laboratory_catalog: Option<ModuleLaboratoryCatalog>,
     #[serde(default)]
     pub(crate) laboratory_statuses: Vec<ModuleLaboratoryStatus>,
@@ -699,6 +705,9 @@ impl Default for State {
             boundary_evidence: Vec::new(),
             attack_graph_observations: Vec::new(),
             attack_graph_evidence: Vec::new(),
+            application_observations: Vec::new(),
+            application_evidence: Vec::new(),
+            application_campaign_pending: false,
             laboratory_catalog: None,
             laboratory_statuses: Vec::new(),
             laboratory_receipts: Vec::new(),

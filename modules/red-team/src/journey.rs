@@ -191,7 +191,7 @@ fn next(
         state.campaign.state = crate::records::CampaignState::Completed;
         state::save(parameters, state)?;
         return Ok(reply(
-            "The source-bound application journey finished. The retained reports distinguish evidence-backed results, pre-accounted adapter gaps, skipped or blocked work, and residual gaps; no expert-parity or universal-coverage claim is made.",
+            "The source-bound application journey finished. Launchable package-based web source was attacked across seven common surfaces; retained reports distinguish executed evidence, unavailable mechanisms, skipped or blocked work, and residual gaps. No expert-parity or universal-coverage claim is made.",
             profile,
             super::actions(state),
             None,
@@ -293,6 +293,7 @@ fn satisfied(
         "boundary-run" => state.boundary_observations.len(),
         "graph-run" => state.attack_graph_observations.len(),
         "diamond-run" => state.attack_graph_observations.len(),
+        "application-run" => state.application_observations.len(),
         _ => 0,
     };
     if command == "analyze" {
@@ -311,6 +312,7 @@ fn satisfied(
             | "boundary-run"
             | "graph-run"
             | "diamond-run"
+            | "application-run"
     ) {
         return Ok(now.observations > step.baseline.observations && observed > 0);
     }
@@ -434,6 +436,7 @@ fn laboratory_recovery_needed(state: &state::State, step: &state::JourneyStep) -
                 | "boundary-run"
                 | "graph-run"
                 | "diamond-run"
+                | "application-run"
         )
 }
 
@@ -624,7 +627,8 @@ fn counters(state: &state::State) -> state::JourneyCounters {
             + state.file_fuzz_observations.len()
             + state.workflow_observations.len()
             + state.boundary_observations.len()
-            + state.attack_graph_observations.len(),
+            + state.attack_graph_observations.len()
+            + state.application_observations.len(),
         laboratory_statuses: state.laboratory_statuses.len(),
         laboratory_receipts: state.laboratory_receipts.len(),
         laboratory_errors: state.laboratory_errors.len(),
@@ -668,6 +672,7 @@ fn install_adapter_id(command: &str) -> Option<&'static str> {
         "boundary-install" => Some(crate::boundary_authority::ADAPTER_ID),
         "graph-install" => Some(crate::attack_graph::ADAPTER_ID),
         "diamond-install" => Some(crate::diamond_binding::ADAPTER_ID),
+        "application-install" => Some(crate::application_binding::ADAPTER_ID),
         _ => None,
     }
 }
@@ -698,12 +703,14 @@ fn plan(state: &state::State) -> Vec<state::JourneyStep> {
         steps.push(step(id, label, command, None));
     }
     add_open_lab(&mut steps, "source", "lab-create source");
-    steps.push(step(
-        "source-process",
-        "Execute the best discovered real source entry point",
-        "lab-run-auto",
-        None,
-    ));
+    if !crate::application_binding::source_observed(state) {
+        steps.push(step(
+            "source-process",
+            "Execute the best discovered real source entry point",
+            "lab-run-auto",
+            None,
+        ));
+    }
     steps.push(step("source-snapshot", "Snapshot disposable source effects", "lab-snapshot", None));
     if diamond_source_observed(state) {
         steps.push(step(
@@ -718,6 +725,19 @@ fn plan(state: &state::State) -> Vec<state::JourneyStep> {
             "diamond-run",
             None,
         ));
+    } else if crate::application_binding::source_observed(state) {
+        steps.push(step(
+            "install-generic-application-binding",
+            "Install the generic source-bound web application binding",
+            "application-install",
+            None,
+        ));
+        steps.push(step(
+            "run-generic-application-binding",
+            "Launch the selected application and execute generic HTTP/browser attacks",
+            "application-run",
+            None,
+        ));
     }
     steps.push(step("source-stop", "Stop source laboratory", "lab-stop", None));
     steps.push(step(
@@ -726,48 +746,6 @@ fn plan(state: &state::State) -> Vec<state::JourneyStep> {
         "lab-teardown",
         None,
     ));
-    if diamond_source_observed(state) {
-        return steps;
-    }
-    for (id, label, detail) in [
-        (
-            "api-applicability-gap",
-            "Account for HTTP/API adapter applicability",
-            "HTTP/API adapter not executed: the selected source campaign has no independently derived linux.python-http-api.v1 controller/service binding. This remains an explicit application coverage gap.",
-        ),
-        (
-            "browser-applicability-gap",
-            "Account for browser adapter applicability",
-            "Browser adapter not executed: no ready application HTTP laboratory was derived from the selected source. Browser trust coverage remains an explicit gap.",
-        ),
-        (
-            "identity-applicability-gap",
-            "Account for identity adapter applicability",
-            "Identity adapter not executed: no independently derived identity topology and compatible ready laboratory exist for the selected application. Authentication and authorization coverage remain an explicit gap.",
-        ),
-        (
-            "file-applicability-gap",
-            "Account for file/parser adapter applicability",
-            "File/parser adapter not executed: no compatible application parser contract was independently derived from the selected source. File and parser runtime coverage remain an explicit gap.",
-        ),
-        (
-            "workflow-applicability-gap",
-            "Account for workflow adapter applicability",
-            "Workflow adapter not executed: no application-specific state-machine contract was independently derived from the selected source. Stateful and concurrency coverage remain an explicit gap.",
-        ),
-        (
-            "boundary-applicability-gap",
-            "Account for boundary adapter applicability",
-            "Boundary adapter not executed: no compatible private network, TLS, or delegated-authority contract was independently derived from the selected source. Boundary runtime coverage remains an explicit gap.",
-        ),
-        (
-            "graph-applicability-gap",
-            "Account for attack-graph adapter applicability",
-            "Attack-graph adapter not executed: the selected application lacks the prerequisite source, HTTP, and browser receipts. Cross-adapter chain coverage remains an explicit gap.",
-        ),
-    ] {
-        steps.push(gap_step(id, label, detail));
-    }
     steps
 }
 
@@ -834,13 +812,6 @@ fn refresh_application_plan(state: &mut state::State) {
     );
 }
 
-fn gap_step(id: &str, label: &str, detail: &str) -> state::JourneyStep {
-    let mut value = step(id, label, "accounted-gap", None);
-    value.state = JourneyStepState::Skipped;
-    value.detail = detail.into();
-    value
-}
-
 fn add_open_lab(steps: &mut Vec<state::JourneyStep>, alias: &str, create: &str) {
     steps.push(step(
         &format!("{alias}-create"),
@@ -865,7 +836,7 @@ fn add_open_lab(steps: &mut Vec<state::JourneyStep>, alias: &str, create: &str) 
 fn plan_text(state: &state::State) -> String {
     let steps = plan(state);
     let mut text = format!(
-        "# Source-bound Red Team campaign\n\n{} sequential or pre-accounted steps; at most one host operation is active. The journey scans the exact immutable source, copies the complete tree, executes a discovered real entry point without requiring target-specific contracts, records copied-tree effects, and proves cleanup plus original-source integrity before it becomes complete. Every registered class-specific adapter is also represented in the retained ledger. An adapter without an independently derived compatible application contract is pre-accounted as a skipped coverage gap; bundled fixtures are calibration targets and are never substituted for the selected application. Markdown, JSON, SARIF, patch, and replay exports become available only after the journey reaches its durable terminal state, so final artifacts cannot describe an in-progress campaign.\n\n",
+        "# Source-bound Red Team campaign\n\n{} sequential steps; at most one host operation is active. The journey scans the exact immutable source, copies the complete tree, executes a discovered real entry point without requiring target-specific contracts, records copied-tree effects, and proves cleanup plus original-source integrity before it becomes complete. Package-based web source is launched and attacked through source-derived HTTP, browser, identity, parser, workflow, boundary, and attack-chain operations. A response becomes a finding only when an independent oracle supports that conclusion. Bundled fixtures are calibration targets and are never substituted for the selected application. Markdown, JSON, SARIF, patch, and replay exports become available only after the journey reaches its durable terminal state, so final artifacts cannot describe an in-progress campaign.\n\n",
         steps.len()
     );
     for (index, step) in steps.iter().enumerate() {

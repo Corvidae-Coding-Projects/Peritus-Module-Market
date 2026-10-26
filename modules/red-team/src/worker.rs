@@ -372,6 +372,11 @@ fn catalog() -> ModuleAdapterCatalog {
                 crate::diamond_binding::OPERATION,
                 "peritus.diamond-application.decoder@1",
             ),
+            descriptor(
+                crate::application_binding::ADAPTER_ID,
+                crate::application_binding::OPERATION,
+                "peritus.generic-web-application.decoder@1",
+            ),
         ],
     }
 }
@@ -591,6 +596,15 @@ fn execute(
             &worker_state_root()?,
         )?)
         .map_err(json_error)?,
+        crate::application_binding::OPERATION => {
+            serde_json::to_value(crate::runtime_application::execute(
+                request.input.clone(),
+                input.source_snapshot.clone(),
+                &input.request_key,
+                &worker_state_root()?,
+            )?)
+            .map_err(json_error)?
+        }
         operation => return Err(format!("unknown module-owned adapter operation `{operation}`")),
     };
     encode(ModuleAdapterExecutionReceipt {

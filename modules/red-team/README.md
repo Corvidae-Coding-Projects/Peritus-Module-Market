@@ -106,8 +106,8 @@ credential, or execution authority.
 After `start`, the module coordinates this sequence:
 
 1. Capture one bounded inventory from the selected immutable source snapshot.
-2. Map security families to concrete application surfaces and leave unsupported areas visibly
-   unexamined or blocked.
+2. Map security families to concrete application surfaces. Web applications are routed into a
+   real generic multi-surface campaign rather than closed as source-only applicability gaps.
 3. Register small falsifiable hypotheses before execution.
 4. Run supported proofs through Red Team's own adapters inside generic Peritus worker containment,
    with finite resources, cleared credentials, deny-all ambient networking, and module-authored
@@ -126,7 +126,8 @@ All security behavior lives in this module:
 - adapter registration, preparation, execution, and receipt decoding;
 - source-analysis rules and dependency/configuration/secret observations;
 - HTTP/API, browser, identity/access, file/parser, workflow/state, boundary/authority, and
-  attack-graph campaign implementations;
+  attack-graph campaign implementations, including a generic source-bound web fallback and a
+  first-class Comms/Bun profile;
 - target entrypoint selection, private Unix transport, target state oracles, canaries, Chromium
   setup, skeptic decisions, repair replay, and report generation; and
 - the private Rust contracts that describe those observations.
@@ -194,18 +195,40 @@ of inventing an external standards reference.
 
 The registry advertises the narrow runtime method `runtime.linux-canary-disclosure.v1` for
 compatible Linux command/native disclosure properties and the Phase 12 source-only method
-`analysis.static-source.v1`. Other missing runtime classes remain
-`gap.no-compatible-runtime.v1`. The compiler rejects inventory prose that calls work “examined”;
-only an admitted host receipt can make that transition.
+`analysis.static-source.v1`. Web and API hypotheses without a dedicated adapter are routed to the
+generic application campaign. It launches the copied application and probes common HTTP methods
+and source-discovered routes, parser failures, identity and authorization boundaries, path/upload
+boundaries, browser rendering and input execution, duplicate mutations, proxy-header confusion,
+and a write-to-authority attack chain. Every successful campaign must retain executed receipts for
+all seven common surfaces: HTTP/API, browser/client, identity/access, file/parser, workflow/state,
+boundary/authority, and attack graph. Unsupported mechanisms
+remain `gap.no-compatible-runtime.v1`; only admitted runtime evidence can make a transition.
 
 The generic process laboratory is not a substitute for a class-specific protocol driver. An
 executable hypothesis is accepted there only when it targets a compatible nondisclosure property
 and delivers the private `{{PERITUS_CANARY}}` through an exact argument, stdin, or non-secret
 environment value. The report retains environment names and value digests, not raw values. A
-hypothesis that needs an HTTP exchange, provisioned identity, file mutation, multi-step protocol,
-or concurrent schedule remains explicitly analysis-only unless the selected source yields a
-compatible class-adapter contract. Merely starting the target can never count as testing the
-described attack.
+hypothesis that needs an HTTP exchange, identity boundary, parser mutation, browser action, or
+multi-step protocol is sent to the source-bound generic application campaign when the application
+can be launched. The Comms/Bun profile additionally knows its health, signup, operator, broker,
+adapter-identity, webhook, body-limit, origin, duplicate-state, and cross-surface authority
+contracts. Unknown web applications receive conservative common-route attacks; their responses are
+retained without inventing application-specific security promises. Merely starting the target can
+never count as testing the described attack.
+
+Package-based web applications with a `start` script are launched from the disposable copy through
+the detected locked Bun or Node/npm runtime. Run that path manually after the source laboratory is
+ready:
+
+```text
+/module peritus.red-team application-install
+/module peritus.red-team application-run
+/module peritus.red-team application
+```
+
+The host projects only the credential-free runtime and existing dependency cache requested by the
+module. The module discovers routes, builds the attack traffic, interprets exact response bytes,
+drives isolated Chromium, and kills the process tree. It never targets an ambient service.
 
 ## Deterministic source analysis
 

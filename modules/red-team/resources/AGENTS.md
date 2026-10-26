@@ -5,6 +5,7 @@
 | [browser_campaign.py](browser_campaign.py) | Module-owned Playwright campaign routed exclusively to module-owned private Unix target sockets. |
 | [attack_graph_browser.py](attack_graph_browser.py) | Module-owned stored-content browser replay used by the receipt-backed attack graph. |
 | [diamond_browser_campaign.py](diamond_browser_campaign.py) | Module-owned Playwright campaign for the real Diamond HTTP runtime, with origin-preserving private transport, CSP-aware form replay, cookie checks, and off-scope blocking. |
+| [generic_web_browser.py](generic_web_browser.py) | Loopback-only Playwright campaign for generic query-script execution and the Comms signup/CSP/injection profile, with off-scope request blocking. |
 | [skeleton-state-v1.json](skeleton-state-v1.json) | Legacy Phase 1 checkpoint used to exercise forward migration. |
 | [phase2-state-v2.json](phase2-state-v2.json) | Canonical empty Phase 2 campaign checkpoint fixture. |
 | [phase3-state-v3.json](phase3-state-v3.json) | Canonical empty Phase 3 campaign-and-jobs checkpoint fixture. |

@@ -1,6 +1,7 @@
 //! Hardened Red Team coordinator: investigation, copy-only repair, replay, and delivery.
 
 mod adapter;
+mod application_binding;
 mod attack_graph;
 mod boundary_authority;
 mod browser_client;
@@ -15,6 +16,7 @@ mod laboratory;
 pub mod records;
 mod repair;
 mod report;
+mod runtime_application;
 mod runtime_attack_graph;
 mod runtime_boundary_authority;
 mod runtime_browser;
@@ -157,6 +159,9 @@ fn command(parameters: &Value) -> Result<ModuleAction, Error> {
     if diamond_binding::handles(command) {
         return diamond_binding::command(parameters, &host, &mut state, command);
     }
+    if application_binding::handles(command) {
+        return application_binding::command(parameters, &host, &mut state, command);
+    }
     if command == "pause" {
         return investigation::pause(parameters, &mut state);
     }
@@ -190,6 +195,7 @@ fn command(parameters: &Value) -> Result<ModuleAction, Error> {
         || workflow_state::handles(command)
         || boundary_authority::handles(command)
         || attack_graph::handles(command)
+        || application_binding::handles(command)
         || adapter::handles(command)
         || laboratory::handles(command)
     {
@@ -286,6 +292,9 @@ fn route_component_command(
     }
     if attack_graph::handles(command) {
         return attack_graph::command(parameters, host, state, command);
+    }
+    if application_binding::handles(command) {
+        return application_binding::command(parameters, host, state, command);
     }
     if adapter::handles(command) {
         return adapter::command(parameters, host, state, command);
@@ -1465,7 +1474,7 @@ fn status(state: &State) -> String {
         .filter(|job| matches!(job.state, records::JobState::Queued | records::JobState::Running))
         .count();
     format!(
-        "# Red Team investigation and repair\n\n- Module: `peritus.red-team` {}\n- Durable schema: v{}\n- Campaign state: `{:?}`\n- Investigation stage: `{:?}`\n- Repair stage: `{:?}`\n- Complete-journey stage: `{:?}`\n- Complete-journey progress: {}/{}\n- Complete-journey gaps/failures: {}\n- Paused: {}\n- Scope revision: `{}`\n- Source snapshot: `{}`\n- Manifest artifact: `{}`\n- Current source observations: {}\n- Invalidated source observations: {}\n- Target profiles: {}\n- Application surfaces: {}\n- Method-backed coverage cells: {}\n- Coverage cells examined: {}\n- Coverage cells blocked: {}\n- Managed adapter lifecycle observations: {}\n- Adapter execution receipts: {}\n- Static-analysis observations: {}\n- Static-analysis source evidence: {}\n- HTTP/API campaigns: {}\n- HTTP/API evidence records: {}\n- Browser campaigns: {}\n- Identity/access campaigns: {}\n- File/parser campaigns: {}\n- Workflow/state campaigns: {}\n- Boundary/authority campaigns: {}\n- Boundary/authority evidence records: {}\n- Attack-graph campaigns: {}\n- Attack-graph evidence records: {}\n- Retained adapter errors: {}\n- Laboratory lifecycle observations: {}\n- Laboratory operation receipts: {}\n- Retained laboratory errors: {}\n- Latest laboratory phase: `{}`\n- Retained hypotheses: {}\n- Retained probes: {}\n- Retained module worker operations: {}\n- Active module worker operations: {}\n- Trusted job receipts: {}\n- Skeptically adjudicated findings: {}\n- Patch revisions: {}\n- Patch replay receipts: {}\n- Original workspace unchanged: {}\n- Security families unexamined: {}\n- Reused exact source reads: {}\n- Foundation checkpoint: {}\n\nThe source handle is revocable. Managed adapters require exact registered descriptors, content identities, platforms, operations and module receipt decoders. Static analysis uses immutable source, pinned module rules and redacted source-only leads; it never establishes runtime exploitability. Runtime adapters can reach only ready opaque disposable-laboratory endpoints; the module captures protocol bytes, copied state, private peer effects, and explicit unavailable-platform gaps while denying ambient network, credentials, privilege, and host tools. Cross-adapter graph search admits only receipt-backed edges, preserves broken and rejected paths, and accepts copy-only repair only after exact source, HTTP, and real-browser replay. Application laboratories require copied immutable source, opaque handles, generic host containment and module-owned target execution, real readiness, state readback, reset, process cleanup and original-source proof. The complete journey schedules only one module operation at a time; steering text and target output remain untrusted and cannot widen authority. Every model role receives the canonical skill directly. The Rust coordinator alone admits source observations, module-authored original and patched execution receipts, classifications, coverage transitions, patch states, and before/after proof; unsuccessful attempts do not establish safety.",
+        "# Red Team investigation and repair\n\n- Module: `peritus.red-team` {}\n- Durable schema: v{}\n- Campaign state: `{:?}`\n- Investigation stage: `{:?}`\n- Repair stage: `{:?}`\n- Complete-journey stage: `{:?}`\n- Complete-journey progress: {}/{}\n- Complete-journey gaps/failures: {}\n- Paused: {}\n- Scope revision: `{}`\n- Source snapshot: `{}`\n- Manifest artifact: `{}`\n- Current source observations: {}\n- Invalidated source observations: {}\n- Target profiles: {}\n- Application surfaces: {}\n- Method-backed coverage cells: {}\n- Coverage cells examined: {}\n- Coverage cells blocked: {}\n- Managed adapter lifecycle observations: {}\n- Adapter execution receipts: {}\n- Static-analysis observations: {}\n- Static-analysis source evidence: {}\n- HTTP/API campaigns: {}\n- HTTP/API evidence records: {}\n- Browser campaigns: {}\n- Identity/access campaigns: {}\n- File/parser campaigns: {}\n- Workflow/state campaigns: {}\n- Boundary/authority campaigns: {}\n- Boundary/authority evidence records: {}\n- Attack-graph campaigns: {}\n- Attack-graph evidence records: {}\n- Generic application campaigns: {}\n- Retained adapter errors: {}\n- Laboratory lifecycle observations: {}\n- Laboratory operation receipts: {}\n- Retained laboratory errors: {}\n- Latest laboratory phase: `{}`\n- Retained hypotheses: {}\n- Retained probes: {}\n- Retained module worker operations: {}\n- Active module worker operations: {}\n- Trusted job receipts: {}\n- Skeptically adjudicated findings: {}\n- Patch revisions: {}\n- Patch replay receipts: {}\n- Original workspace unchanged: {}\n- Security families unexamined: {}\n- Reused exact source reads: {}\n- Foundation checkpoint: {}\n\nThe source handle is revocable. Managed adapters require exact registered descriptors, content identities, platforms, operations and module receipt decoders. Static analysis uses immutable source, pinned module rules and redacted source-only leads; it never establishes runtime exploitability. Runtime adapters can reach only ready opaque disposable-laboratory endpoints; the module captures protocol bytes, copied state, private peer effects, and explicit unavailable-platform gaps while denying ambient network, credentials, privilege, and host tools. Cross-adapter graph search admits only receipt-backed edges, preserves broken and rejected paths, and accepts copy-only repair only after exact source, HTTP, and real-browser replay. Application laboratories require copied immutable source, opaque handles, generic host containment and module-owned target execution, real readiness, state readback, reset, process cleanup and original-source proof. The complete journey schedules only one module operation at a time; steering text and target output remain untrusted and cannot widen authority. Every model role receives the canonical skill directly. The Rust coordinator alone admits source observations, module-authored original and patched execution receipts, classifications, coverage transitions, patch states, and before/after proof; unsuccessful attempts do not establish safety.",
         state.module_version,
         state.schema,
         state.campaign.state,
@@ -1508,6 +1517,7 @@ fn status(state: &State) -> String {
         state.boundary_evidence.len(),
         state.attack_graph_observations.len(),
         state.attack_graph_evidence.len(),
+        state.application_observations.len(),
         state.adapter_errors.len(),
         state.laboratory_statuses.len(),
         state.laboratory_receipts.len(),
@@ -1728,6 +1738,9 @@ fn actions(state: &State) -> Vec<ModuleMenuAction> {
             action("Install attack-graph adapter", "graph-install", true),
             action("Run cross-adapter attack graph", "graph-run", true),
             action("Attack-graph history", "graph-history", true),
+            action("Generic application campaign", "application", true),
+            action("Install generic application binding", "application-install", true),
+            action("Run generic application attacks", "application-run", true),
             action("Refresh source", "refresh", true),
             action("Target profiles", "profiles", true),
             action("Surface graph", "surfaces", true),
@@ -1773,6 +1786,7 @@ fn actions(state: &State) -> Vec<ModuleMenuAction> {
                     action("Run workflow/state campaign", "workflow-run", true),
                     action("Run boundary/authority campaign", "boundary-run", true),
                     action("Run cross-adapter attack graph", "graph-run", true),
+                    action("Run generic application attacks", "application-run", true),
                     action("Snapshot laboratory", "lab-snapshot", true),
                     action("Reset laboratory", "lab-reset", true),
                     action("Stop laboratory", "lab-stop", true),
@@ -1794,6 +1808,7 @@ fn actions(state: &State) -> Vec<ModuleMenuAction> {
         action("Workflow/state adapter status", "workflow-status", true),
         action("Boundary/authority adapter status", "boundary-status", true),
         action("Attack-graph adapter status", "graph-status", true),
+        action("Generic application adapter status", "application-status", true),
         action("Managed adapters", "adapters", true),
         action("Install diagnostic adapter", "adapter-install diagnostic", true),
         action("Adapter status", "adapter-status", true),
@@ -1834,6 +1849,8 @@ fn base_actions() -> Vec<ModuleMenuAction> {
         action("Install boundary/authority adapter", "boundary-install", true),
         action("Attack-graph support", "graph", true),
         action("Install attack-graph adapter", "graph-install", true),
+        action("Generic application support", "application", true),
+        action("Install generic application binding", "application-install", true),
         action("Managed adapters", "adapters", true),
         action("Install diagnostic adapter", "adapter-install diagnostic", true),
         action("Adapter history", "adapter-history", true),
