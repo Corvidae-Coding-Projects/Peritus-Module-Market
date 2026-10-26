@@ -2,7 +2,7 @@
 
 ## 2026-10-26 generic application campaign
 
-The final `0.17.0` module executable was driven through its real native worker boundary against
+The `0.17.0` module executable was driven through its real native worker boundary against
 disposable application copies. No unit-test or mock target was used.
 
 | Target | Runtime | Executed result |

@@ -68,12 +68,13 @@ pub(super) fn execute(
         return Err("generic application request has an invalid source identity or bound".into());
     }
     let root = env::current_dir().map_err(|error| error.to_string())?;
-    let entrypoint = require_web_source(&root, &request.profile)?;
+    let profile = effective_profile(&root, &request.profile)?;
+    let entrypoint = require_web_source(&root, &profile)?;
     let (runtime_path, runtime_arguments, runtime_name, preparation) =
-        prepare_runtime(&root, &request.profile)?;
+        prepare_runtime(&root, &profile)?;
     let mut campaign = ApplicationCampaign {
         schema: 1,
-        profile: request.profile.clone(),
+        profile: profile.clone(),
         laboratory_id: request.laboratory_id,
         source_snapshot,
         runtime: runtime_name,
@@ -93,25 +94,20 @@ pub(super) fn execute(
         gaps: Vec::new(),
         surfaces_exercised: Vec::new(),
     };
-    let mut runtime = match WebRuntime::launch(
-        &root,
-        &runtime_path,
-        &runtime_arguments,
-        &request.profile,
-        request_key,
-    ) {
-        Ok(runtime) => runtime,
-        Err(error) => {
-            campaign.gaps.push(format!("real application launch failed: {error}"));
-            campaign.traffic_digest = digest(campaign.gaps.join("\n").as_bytes());
-            campaign.final_state_digest = directory_digest(&root)?;
-            campaign.process_cleanup_complete = true;
-            return Ok(campaign);
-        }
-    };
+    let mut runtime =
+        match WebRuntime::launch(&root, &runtime_path, &runtime_arguments, &profile, request_key) {
+            Ok(runtime) => runtime,
+            Err(error) => {
+                campaign.gaps.push(format!("real application launch failed: {error}"));
+                campaign.traffic_digest = digest(campaign.gaps.join("\n").as_bytes());
+                campaign.final_state_digest = directory_digest(&root)?;
+                campaign.process_cleanup_complete = true;
+                return Ok(campaign);
+            }
+        };
     campaign.ready = true;
     let initial_state = directory_digest(&root)?;
-    let exchanges = if request.profile == "comms-bun.v1" {
+    let exchanges = if profile == "comms-bun.v1" {
         comms_campaign(&runtime)?
     } else {
         generic_campaign(&root, &runtime)?
@@ -144,7 +140,7 @@ pub(super) fn execute(
     match runtime_browser::generic_web_campaign(
         &state_root.join("generic-application-browser"),
         &format!("http://{}", runtime.address),
-        &request.profile,
+        &profile,
     ) {
         Ok(value) => {
             let browser_cases: Vec<ApplicationAttackCase> = serde_json::from_value(
@@ -943,6 +939,38 @@ fn concat_bearer(token: &str) -> &'static str {
     }
 }
 
+fn effective_profile(root: &Path, requested: &str) -> Result<String, String> {
+    let package_path = root.join("package.json");
+    let package_bytes = fs::read(&package_path)
+        .map_err(|_| "generic application campaign requires package.json in the scoped source")?;
+    let package: Value = serde_json::from_slice(&package_bytes)
+        .map_err(|error| format!("read package.json for runtime selection: {error}"))?;
+    let uses_bun = root.join("bun.lock").is_file()
+        || root.join("bun.lockb").is_file()
+        || package
+            .get("packageManager")
+            .and_then(Value::as_str)
+            .is_some_and(|manager| manager.starts_with("bun@"));
+    let is_comms = uses_bun
+        && root.join("server/index.ts").is_file()
+        && root.join("server/app.ts").is_file()
+        && package.get("name").and_then(Value::as_str) == Some("@flt/comms");
+    let detected = if is_comms {
+        "comms-bun.v1"
+    } else if uses_bun {
+        "generic-bun-web.v1"
+    } else {
+        "generic-node-web.v1"
+    };
+    if !matches!(
+        requested,
+        "generic-web.v1" | "comms-bun.v1" | "generic-bun-web.v1" | "generic-node-web.v1"
+    ) {
+        return Err(format!("unsupported generic application profile `{requested}`"));
+    }
+    Ok(detected.into())
+}
+
 fn require_web_source(root: &Path, profile: &str) -> Result<String, String> {
     if !root.join("package.json").is_file() {
         return Err(
@@ -962,10 +990,15 @@ fn prepare_runtime(
     profile: &str,
 ) -> Result<(PathBuf, Vec<String>, String, String), String> {
     if profile == "generic-node-web.v1" {
-        let npm = ["/usr/bin/npm", "/usr/local/bin/npm"]
-            .into_iter()
+        let npm = env::var_os("PERITUS_NPM_EXECUTABLE")
             .map(PathBuf::from)
-            .find(|path| path.is_file())
+            .filter(|path| path.is_absolute() && path.is_file())
+            .or_else(|| {
+                ["/usr/bin/npm", "/usr/local/bin/npm"]
+                    .into_iter()
+                    .map(PathBuf::from)
+                    .find(|path| path.is_file())
+            })
             .ok_or("the isolated worker has no npm runtime for this Node application")?;
         if !root.join("node_modules").is_dir() {
             return Err(

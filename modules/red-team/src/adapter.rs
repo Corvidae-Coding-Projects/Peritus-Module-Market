@@ -3,8 +3,8 @@
 use crate::{Error, invalid, reply, state, state::PendingRequest};
 use peritus_plugin_sdk::{
     HOST_CAPABILITY_WORKER, MODULE_WORKER_FEATURE_BROWSER_AUTOMATION,
-    MODULE_WORKER_FEATURE_BUN_RUNTIME, MODULE_WORKER_FEATURE_CARGO_DEPENDENCIES, ModuleAction,
-    ModuleAdapterCancelRequest, ModuleAdapterCatalog, ModuleAdapterCompleteRequest,
+    MODULE_WORKER_FEATURE_CARGO_DEPENDENCIES, MODULE_WORKER_FEATURE_JAVASCRIPT_RUNTIME,
+    ModuleAction, ModuleAdapterCancelRequest, ModuleAdapterCatalog, ModuleAdapterCompleteRequest,
     ModuleAdapterExecuteRequest, ModuleAdapterExecutionReceipt, ModuleAdapterPhase,
     ModuleAdapterPreparationHandle, ModuleAdapterPrepareRequest, ModuleAdapterRemoveRequest,
     ModuleAdapterRuntimeIdentity, ModuleAdapterStatus, ModuleAdapterStatusRequest,
@@ -465,11 +465,10 @@ fn worker_runtime_features(pending: &PendingRequest) -> Vec<String> {
             MODULE_WORKER_FEATURE_CARGO_DEPENDENCIES.into(),
         ],
         crate::application_binding::ADAPTER_ID => {
-            let mut features = vec![MODULE_WORKER_FEATURE_BROWSER_AUTOMATION.into()];
-            if request.input["profile"].as_str().is_some_and(|profile| profile.contains("bun")) {
-                features.push(MODULE_WORKER_FEATURE_BUN_RUNTIME.into());
-            }
-            features
+            vec![
+                MODULE_WORKER_FEATURE_BROWSER_AUTOMATION.into(),
+                MODULE_WORKER_FEATURE_JAVASCRIPT_RUNTIME.into(),
+            ]
         }
         crate::browser_client::ADAPTER_ID | crate::attack_graph::ADAPTER_ID => {
             vec![MODULE_WORKER_FEATURE_BROWSER_AUTOMATION.into()]

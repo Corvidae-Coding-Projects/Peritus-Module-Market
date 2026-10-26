@@ -40,6 +40,7 @@ pub const MODULE_WORKER_FEATURE_BROWSER_AUTOMATION: &str = "browser-automation-v
 /// The host projects only generic runtime resources. The module still owns source entry points,
 /// commands, target behavior, evidence, and interpretation.
 pub const MODULE_WORKER_FEATURE_BUN_RUNTIME: &str = "bun-runtime-v1";
+pub const MODULE_WORKER_FEATURE_JAVASCRIPT_RUNTIME: &str = "javascript-runtime-v1";
 
 /// Locked Cargo registry dependencies prepared for an isolated module worker.
 ///

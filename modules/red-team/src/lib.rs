@@ -880,9 +880,16 @@ fn host_result(parameters: &Value) -> Result<ModuleAction, Error> {
             || worker.execution_plan_digest.len() != 64
             || !worker.stderr.is_empty()
         {
-            return Err(invalid(
-                "module worker did not complete cleanly against an unchanged original source",
-            ));
+            let stderr = String::from_utf8_lossy(&worker.stderr);
+            let stderr = stderr.chars().take(2_048).collect::<String>();
+            return Err(invalid(format!(
+                "module worker `{}` failed: exit={:?}, cleanup={}, original_source_unchanged={}, plan_digest_bytes={}, stderr={stderr:?}",
+                worker.worker,
+                worker.exit_code,
+                worker.cleanup_complete,
+                worker.original_source_unchanged,
+                worker.execution_plan_digest.len(),
+            )));
         }
         let output = serde_json::from_slice(&worker.stdout)?;
         if expected_worker == "adapter-runtime" {
