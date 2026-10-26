@@ -1027,12 +1027,17 @@ fn prepare_runtime(
     let cache = env::var_os("BUN_INSTALL_CACHE_DIR")
         .map(PathBuf::from)
         .ok_or("dependencies are absent and no read-only Bun package cache was projected")?;
+    let temporary = root.join(".peritus-bun-tmp");
+    fs::create_dir_all(&temporary)
+        .map_err(|error| format!("create disposable Bun temporary directory: {error}"))?;
     let output = Command::new(&bun)
         .args(["install", "--frozen-lockfile", "--ignore-scripts", "--cache-dir"])
         .arg(cache)
         .current_dir(root)
         .env_clear()
         .env("PATH", "/usr/local/bin:/usr/bin:/bin")
+        .env("BUN_TMPDIR", &temporary)
+        .env("TMPDIR", &temporary)
         .stdin(Stdio::null())
         .output()
         .map_err(|error| format!("prepare Bun dependencies: {error}"))?;
