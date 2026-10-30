@@ -673,6 +673,165 @@ campaign state. Completion means the source-bound steps finished and every regis
 was either exercised by separately retained compatible receipts or named as a gap. It does not mean
 every vulnerability class or target technology was tested.
 
+## Inspect autonomous exploit-research contracts
+
+Version 0.25.0 completes bounded Stage 8 enablement for the exact qualified profile, including inert
+licensed emulation recipes, source-refresh graph continuity, hardened atomic Stage 5/6 artifacts,
+and complete Stage 7 advisory provenance. Use `research` to inspect the v2
+contract, integrity digest, record counts, Stage 4 phase and budgets, Stage 5 PoC bundles, Stage 6
+repair bundles, Stage 7 disclosure packages, and Stage 8 availability.
+`capability-project` revalidates retained class-specific evidence and rebuilds only the
+projection-owned catalog. `graph-v2-build` converts admitted primitives into
+typed entry, prerequisite, capability, state, authority, and impact nodes; applies versioned
+target, laboratory, subject, authority, capability, and evidence rules; and searches a finite
+frontier for compatibility candidates. `graph-v2-break CAPABILITY_ID` records a graph-only
+counterfactual without deleting the primitive. `graph-v2-experiments` exposes bounded
+specifications for legal unresolved joins. Stage 4 can then ask separate model roles to select
+closed registered experiments while Rust retains all authority, request construction, dispatch,
+oracle, admission, and ranking decisions:
+
+```text
+/module peritus.red-team research
+/module peritus.red-team research-qualification
+/module peritus.red-team research-recipes
+/module peritus.red-team research-recipe RECIPE_ID
+/module peritus.red-team research-recipe-seed RECIPE_ID
+/module peritus.red-team capability-project
+/module peritus.red-team capabilities
+/module peritus.red-team capability-history
+/module peritus.red-team graph-v2-build
+/module peritus.red-team graph-v2
+/module peritus.red-team graph-v2-experiments
+/module peritus.red-team graph-v2-history
+/module peritus.red-team graph-v2-break CAPABILITY_ID
+/module peritus.red-team research-history
+/module peritus.red-team research-roles
+/module peritus.red-team research-start turns=12 experiments=8 cost=16
+/module peritus.red-team research-frontier
+/module peritus.red-team research-next
+/module peritus.red-team research-pause
+/module peritus.red-team research-resume
+/module peritus.red-team research-steer DETAILS
+/module peritus.red-team research-prioritize browser.campaign.v1
+/module peritus.red-team research-exclude boundary.campaign.v1
+/module peritus.red-team research-cancel
+/module peritus.red-team poc-plan
+/module peritus.red-team poc-start [CHAIN_ID]
+/module peritus.red-team poc-history
+/module peritus.red-team poc-cancel
+/module peritus.red-team repair-plan
+/module peritus.red-team repair-start [POC_BUNDLE_ID]
+/module peritus.red-team repair-history
+/module peritus.red-team repair-cancel
+/module peritus.red-team disclosure-plan
+/module peritus.red-team disclosure-start [REPAIR_BUNDLE_ID]
+/module peritus.red-team disclosure-review [PACKAGE_ID]
+/module peritus.red-team disclosure-show PACKAGE_ID
+/module peritus.red-team disclosure-history
+/module peritus.red-team disclosure-export [PACKAGE_ID]
+/module peritus.red-team disclosure-cancel
+```
+
+`research-qualification` exposes the exact Linux, target, adapter, client, identity, network,
+resource, and artifact matrix that passed installed-product qualification. Combinations outside that
+matrix remain blocked or explicit gaps. `research-recipes` lists inert public-knowledge records with
+license, HTTPS provenance, retrieval date, evidence class, prerequisites, harmless laboratory
+equivalents, registered-adapter mappings, and unsafe gaps. A recipe can be explicitly seeded only
+during active Stage 4 work; it creates no primitive, edge, finding, target effect, or evidence and
+must be independently reproduced by the selected target.
+
+Projection covers source analysis, HTTP/API, browser, identity/access, file/parser,
+workflow/state, and boundary/authority evidence without changing any adapter's oracle or evidence
+grade. Exact target, subject, authority, adapter version, projection version, typed prerequisites,
+produced facts, oracle, and receipts are content-bound into each identity. Missing target
+continuity, stale laboratories, incompatible subjects or authority, insufficient oracle evidence,
+and unsupported capability kinds remain rejected records and never appear as primitives.
+
+Graph-v2 uses explicit default bounds of 256 nodes, 512 edges, depth 6, 128 open candidates, zero
+cycles, and cost 12. Optional `nodes=N edges=N depth=N open=N cycles=N cost=N` arguments may lower
+or raise them only within the hard safe range reported by command validation. Supported edges bind
+exact receipts. Legal joins that still lack producer-state-to-consumer-input proof remain
+`unresolved` and produce experiment specifications; co-observation alone is rejected as
+`temporal_only`. Candidate chains are not confirmed exploit chains and carry no replay receipt.
+
+Stage 4 rotates nine bounded role contracts across configured writer and reviewer routes. A model
+can inspect compact typed projections and propose one operation, changed dimension, and sought
+capability; it cannot provide a command, payload, path, URL, credential, or raw target request.
+The deterministic coordinator rejects unknown operations, incompatible dimensions and capability
+kinds, duplicate unchanged work, missing runtimes, explicit exclusions, graph-specification
+mismatches, and work outside finite turn, experiment, and cost budgets. It dispatches at most one
+host-owned registered adapter request at a time and admits only capabilities that survive the
+existing class-specific runtime oracle.
+
+`research-pause` retains an exact in-flight request for `research-resume`; restart and client
+reattachment reissue the same request. Cancellation and provider, timeout, or resource failure
+retain factual terminal dispositions without admitting partial output. Steering can reprioritize or
+exclude future work but cannot rewrite observed receipts. Experiments remain confined to the
+selected disposable private laboratory with no ambient credentials, personal browser profile,
+public-network authority, or write path to the original source.
+
+Stage 5 accepts only a candidate client-script chain whose required experiments are settled and
+whose ordered edges are supported by exact source-analysis, HTTP/API, and browser receipts. It
+replays the full route from fresh target state, removes one necessary prerequisite, runs the exact
+safe twin, and gives the full, broken, and rejected evidence to the registered independent skeptic.
+Only after those controls pass does the versioned minimizer execute the exact generated script in
+new disposable vulnerable and safe environments without Peritus orchestration.
+
+The retained bundle contains owner-only vendor and regression PoC scripts, a manifest, expected
+vulnerable/safe outcomes, cleanup requirements, and raw evidence hashes. The script accepts only
+the manifest-bound application and service paths and SHA-256 hashes, the literal
+`unix://poc-private/target.sock` destination, and the literal synthetic
+`ordinary-user:credential-free` identity. Public, LAN, host-loopback, unresolved, symlinked,
+hash-mismatched, and wrong-identity targets fail before target or browser launch. If replay or
+minimization is unsafe or nondeterministic, the bundle becomes `blocked` and no PoC artifact is
+emitted.
+
+Stage 6 accepts only a verified Stage 5 PoC bound to the current immutable confirmed graph, source
+snapshot, vulnerable/safe laboratories, and installed attack-graph runtime. It changes one exact
+earliest vulnerable preimage in a disposable copy, launches a fresh patched twin, and replays the
+minimized PoC, the original chain and counterfactual, all supporting adapter obligations,
+legitimate and malformed cases, adjacent entry points, and bounded mutations over encoding,
+ordering, transport, identity, state, and timing. The browser bridge honors each response's declared
+body boundary, so trailing target bytes cannot become test script or markup.
+
+The independent reviewer must accept the exact diff and complete replay matrix and explicitly
+reject feature disabling, signal/error suppression, replacement with a safe fixture, and repair of
+only a later symptom. Accepted worker evidence produces owner-only `repair.patch`,
+`regression-replay.py`, `regression-matrix.json`, `patch-review.json`, `manifest.json`, and
+`evidence.json` files. The repair is not `verified` until the host separately proves that the
+original scoped source still matches the starting snapshot. Changed source rejects a replayed
+repair; cancellation, forged or malformed output, unsafe replay, or incomplete review blocks it.
+Red Team never applies the returned patch to the selected checkout.
+
+Stage 7 accepts only a verified Stage 6 repair bound to the current source snapshot, confirmed
+chain, verified PoC, accepted patch review, and complete regression evidence. It searches only the
+scoped-source manifest for `SECURITY.md`, `.github/SECURITY.md`, or `docs/SECURITY.md`, prefers the
+root policy, caps the read at 64 KiB, and binds an exact complete read to the source snapshot. A
+verified address and policy URL retain path, source digest, byte-range artifact, and provenance.
+Missing, rejected, or unusable contact data remains an explicit unresolved placeholder; no
+recipient is guessed.
+
+`disclosure-start` declares the draft after contact resolution. `disclosure-review` separately
+generates an owner-only package containing advisory JSON and Markdown; vendor email, GitHub private
+advisory, bug-bounty/PSIRT, CNA/CVE, acknowledgement, fix-verification, and coordinated-publication
+drafts; exact retained vendor/regression PoCs, patch, and regression matrix; redaction and
+no-delivery receipts; and evidence/export manifests. CWE, CAPEC, OWASP, CVSS, and severity are
+explicit projections bounded by demonstrated laboratory impact. Private vendor, regression, and
+sanitized-public artifacts remain separately classified.
+
+`disclosure-export` re-verifies every expected byte, digest, file mode, and directory mode before
+advancing the local timeline through `draft`, `package_reviewed`, `awaiting_user_authorization`, and
+`exported`. Repeated export is idempotent. The module exposes no email, repository, issue, portal,
+CNA/CVE, network, publication, or other delivery operation; export is only an owner-local artifact
+state. `disclosure-show` and `disclosure-history` are read-only, while `disclosure-cancel` removes
+only an unsettled contact lookup and creates no package. Stage 8 enables this path only for the
+bounded matrix shown by `research-qualification`; unsupported platforms, targets, adapters,
+identities, impacts, and transports remain blocked or explicit gaps.
+Standalone replay still requires an operator-provided disposable OS/container/VM sandbox suitable
+for untrusted target code; the script clears the target environment and uses a private Unix socket,
+but is not itself a general operating-system sandbox. The existing `graph`, `graph-run`, and
+`graph-history` commands continue to use graph-v1.
+
 ## Read the results correctly
 
 | Finding state | Meaning |
@@ -731,6 +890,15 @@ is a separate user-controlled action.
 | `campaign-retry` / `campaign-skip` | Retry the exact blocked step or preserve it as an explicit gap and continue. |
 | `campaign-abort` | Stop scheduling coverage and replace the remainder with observable laboratory cleanup steps. |
 | `status` | Show campaign, investigation, repair, evidence, job, finding, patch, and coverage counts. |
+| `research`, `research-history`, `research-roles` | Inspect schema-19 contracts, immutable v2 history, current Stage 4 availability, and the nine bounded model-role contracts. |
+| `research-qualification` | Show the exact Stage 8 installed-product support matrix, acceptance boundary, and residual gaps without changing state. |
+| `research-recipes`, `research-recipe ID` | List or inspect inert licensed public-knowledge recipes with HTTPS provenance, evidence class, harmless mappings, and unsafe gaps. |
+| `research-recipe-seed ID` | Bind one recipe as an untrusted Stage 4 hypothesis; it creates no evidence, finding, graph edge, or target effect. |
+| `research-start [turns=N experiments=N cost=N]`, `research-next`, `research-frontier` | Start the finite Stage 4 scheduler, dispatch its next single model/adapter step, or inspect its ranked durable frontier. |
+| `research-pause`, `research-resume`, `research-cancel` | Preserve and reissue the exact pending experiment, or close unsettled work without admitting incomplete output. |
+| `research-steer TEXT`, `research-prioritize OPERATION`, `research-exclude OPERATION` | Guide only future bounded work without expanding authority or rewriting settled evidence. |
+| `poc-plan`, `poc-start [CHAIN_ID]` | Inspect exact Stage 5 eligibility or run fresh full/broken/safe replays, skepticism, minimization, and private standalone PoC verification. |
+| `poc-history`, `poc-cancel` | Inspect owner-only PoC bundle state or block an unsettled confirmation without admitting incomplete output. |
 | `scope [exclude PATHS]` | Capture the explicitly opened workspace with optional source-relative exclusions. |
 | `start` | Start or recover the autonomous investigation and copy-only repair chain. |
 | `steer TEXT` | Retain bounded guidance for current and later roles. |

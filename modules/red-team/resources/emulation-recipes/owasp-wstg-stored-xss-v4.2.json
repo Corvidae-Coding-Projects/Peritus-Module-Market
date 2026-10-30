@@ -1,0 +1,55 @@
+{
+  "schema": 2,
+  "id": "owasp-wstg-inpv-02-stored-xss",
+  "version": "4.2",
+  "title": "OWASP WSTG stored cross-site scripting test objectives",
+  "provenance": [
+    {
+      "kind": "official_testing_guide",
+      "url": "https://wstg.owasp.org/stable/4-Web_Application_Security_Testing/07-Input_Validation_Testing/02-Testing_for_Stored_Cross_Site_Scripting/",
+      "retrieved_on": "2026-10-30"
+    },
+    {
+      "kind": "official_license",
+      "url": "https://github.com/OWASP/wstg/blob/master/LICENSE",
+      "retrieved_on": "2026-10-30"
+    }
+  ],
+  "license": "CC-BY-SA-4.0",
+  "evidence_class": "public_claim",
+  "attacker_access": [
+    "ability to submit application content through an ordinary user-facing input",
+    "a later synthetic user navigation that renders the stored content"
+  ],
+  "tools_and_roles": [
+    "bounded HTTP application client",
+    "isolated managed browser",
+    "independent evidence skeptic"
+  ],
+  "prerequisites": [
+    "the selected application persists attacker-controlled content",
+    "a later application route renders that exact content in a browser document",
+    "the application fails to neutralize the content for the browser context"
+  ],
+  "observed_or_claimed_primitives": [
+    "store attacker-controlled content",
+    "retrieve stored content through a legitimate application route",
+    "interpret stored content as active client-side markup"
+  ],
+  "harmless_laboratory_equivalents": [
+    "replace all external callbacks with one fixed private same-origin canary",
+    "use only synthetic credential-free identities",
+    "treat browser execution as established only from the private canary receipt"
+  ],
+  "adapter_mappings": [
+    "http.campaign.v1",
+    "browser.campaign.v1"
+  ],
+  "unsafe_or_unsupported_gaps": [
+    "do not reproduce credential access, cookie theft, browser control, internal port scanning, or external callbacks",
+    "do not import example payloads or executable incident content",
+    "the recipe creates no finding until the selected target independently produces exact receipts"
+  ],
+  "user_embargo_metadata": null,
+  "executable_content": false
+}

@@ -252,48 +252,42 @@ pub(crate) fn admit(
             }
             status_text(&status)
         }
-        PendingRequest::AdapterExecute { .. } => {
+        PendingRequest::AdapterExecute { request, .. } => {
+            let receipt: ModuleAdapterExecutionReceipt = match serde_json::from_value(output) {
+                Ok(receipt) => receipt,
+                Err(error) if request.operation == crate::runtime_chain_confirmation::OPERATION => {
+                    crate::chain_confirmation::receipt_failure(
+                        parameters,
+                        state,
+                        &request,
+                        &format!("worker output was not a typed adapter receipt: {error}"),
+                    )?;
+                    return Err(error.into());
+                }
+                Err(error) if request.operation == crate::runtime_chain_repair::OPERATION => {
+                    crate::chain_repair::receipt_failure(
+                        parameters,
+                        state,
+                        &request,
+                        &format!("worker output was not a typed adapter receipt: {error}"),
+                    )?;
+                    return Err(error.into());
+                }
+                Err(error) => return Err(error.into()),
+            };
+            if receipt.operation == crate::runtime_chain_confirmation::OPERATION {
+                return crate::chain_confirmation::admit(
+                    parameters, profile, state, &request, receipt,
+                );
+            }
+            if receipt.operation == crate::runtime_chain_repair::OPERATION {
+                return crate::chain_repair::admit(parameters, profile, state, &request, receipt);
+            }
+            return admit_execution(parameters, profile, state, receipt, None);
+        }
+        PendingRequest::ResearchExperimentExecute { experiment_id, .. } => {
             let receipt: ModuleAdapterExecutionReceipt = serde_json::from_value(output)?;
-            state.adapter_receipts.push(receipt.clone());
-            if receipt.operation == crate::source_analysis::OPERATION {
-                return crate::source_analysis::admit(parameters, profile, state, receipt);
-            }
-            if receipt.operation == crate::http_api::OPERATION {
-                return crate::http_api::admit(parameters, profile, state, receipt);
-            }
-            if receipt.operation == crate::browser_client::OPERATION {
-                return crate::browser_client::admit(parameters, profile, state, receipt);
-            }
-            if receipt.operation == crate::identity_access::OPERATION {
-                return crate::identity_access::admit(parameters, profile, state, receipt);
-            }
-            if receipt.operation == crate::file_fuzz::OPERATION {
-                return crate::file_fuzz::admit(parameters, profile, state, receipt);
-            }
-            if receipt.operation == crate::workflow_state::OPERATION {
-                return crate::workflow_state::admit(parameters, profile, state, receipt);
-            }
-            if receipt.operation == crate::boundary_authority::OPERATION {
-                return crate::boundary_authority::admit(parameters, profile, state, receipt);
-            }
-            if receipt.operation == crate::attack_graph::OPERATION {
-                return crate::attack_graph::admit(parameters, profile, state, receipt);
-            }
-            if receipt.operation == crate::diamond_binding::OPERATION {
-                return crate::diamond_binding::admit(parameters, profile, state, receipt);
-            }
-            if receipt.operation == crate::application_binding::OPERATION {
-                return crate::application_binding::admit(parameters, profile, state, receipt);
-            }
-            format!(
-                "# Diagnostic adapter receipt\n\n- Runtime: `{}`\n- Operation: `{}`\n- Input digest: `{}`\n- Receipt decoder: `{}`\n- Executed by: `{}`\n\n```json\n{}\n```",
-                receipt.runtime_digest,
-                receipt.operation,
-                receipt.input_digest,
-                receipt.receipt_decoder,
-                receipt.executed_by,
-                serde_json::to_string_pretty(&receipt.observation)?,
-            )
+            return admit_execution(parameters, profile, state, receipt, Some(&experiment_id));
         }
         _ => return Err(invalid("non-adapter pending request reached adapter admission")),
     };
@@ -361,7 +355,10 @@ fn service(
         PendingRequest::AdapterCancel { request, .. } => serde_json::to_value(request)?,
         PendingRequest::AdapterStatus { request, .. } => serde_json::to_value(request)?,
         PendingRequest::AdapterRemove { request, .. } => serde_json::to_value(request)?,
-        PendingRequest::AdapterExecute { request, .. } => serde_json::to_value(request)?,
+        PendingRequest::AdapterExecute { request, .. }
+        | PendingRequest::ResearchExperimentExecute { request, .. } => {
+            serde_json::to_value(request)?
+        }
         _ => return Err(invalid("non-adapter request reached adapter service")),
     };
     let key = pending.key().to_owned();
@@ -416,7 +413,8 @@ pub(crate) fn resume_worker(
         PendingRequest::AdapterCancel { request, .. } => ("cancel", serde_json::to_value(request)?),
         PendingRequest::AdapterStatus { request, .. } => ("status", serde_json::to_value(request)?),
         PendingRequest::AdapterRemove { request, .. } => ("remove", serde_json::to_value(request)?),
-        PendingRequest::AdapterExecute { request, .. } => {
+        PendingRequest::AdapterExecute { request, .. }
+        | PendingRequest::ResearchExperimentExecute { request, .. } => {
             ("execute", serde_json::to_value(request)?)
         }
         _ => return Err(invalid("non-adapter request reached adapter worker resume")),
@@ -456,8 +454,10 @@ pub(crate) fn resume_worker(
 }
 
 fn worker_runtime_features(pending: &PendingRequest) -> Vec<String> {
-    let PendingRequest::AdapterExecute { request, .. } = pending else {
-        return Vec::new();
+    let request = match pending {
+        PendingRequest::AdapterExecute { request, .. }
+        | PendingRequest::ResearchExperimentExecute { request, .. } => request,
+        _ => return Vec::new(),
     };
     match request.runtime.adapter_id.as_str() {
         crate::diamond_binding::ADAPTER_ID => vec![
@@ -555,6 +555,116 @@ pub(crate) fn execute(
         PendingRequest::AdapterExecute { key: next_key(state, "execute"), request },
         "execute",
     )
+}
+
+pub(crate) fn execute_research(
+    parameters: &Value,
+    state: &mut state::State,
+    experiment_id: String,
+    request: ModuleAdapterExecuteRequest,
+) -> Result<ModuleAction, Error> {
+    let key = format!(
+        "red-team-research-execute-{}",
+        experiment_id.strip_prefix("experiment-").unwrap_or(&experiment_id)
+    );
+    service(
+        parameters,
+        state,
+        PendingRequest::ResearchExperimentExecute { key, experiment_id, request },
+        "execute",
+    )
+}
+
+pub(crate) fn execute_confirmation(
+    parameters: &Value,
+    state: &mut state::State,
+    bundle_id: &str,
+    request: ModuleAdapterExecuteRequest,
+) -> Result<ModuleAction, Error> {
+    let suffix = bundle_id.strip_prefix("poc-").unwrap_or(bundle_id);
+    service(
+        parameters,
+        state,
+        PendingRequest::AdapterExecute {
+            key: format!("red-team-chain-confirm-{}", &suffix[..suffix.len().min(32)]),
+            request,
+        },
+        "execute",
+    )
+}
+
+pub(crate) fn execute_chain_repair(
+    parameters: &Value,
+    state: &mut state::State,
+    bundle_id: &str,
+    request: ModuleAdapterExecuteRequest,
+) -> Result<ModuleAction, Error> {
+    let suffix = bundle_id.strip_prefix("repair-").unwrap_or(bundle_id);
+    service(
+        parameters,
+        state,
+        PendingRequest::AdapterExecute {
+            key: format!("red-team-chain-repair-{}", &suffix[..suffix.len().min(32)]),
+            request,
+        },
+        "execute",
+    )
+}
+
+fn admit_execution(
+    parameters: &Value,
+    profile: &Option<ModuleHostProfile>,
+    state: &mut state::State,
+    receipt: ModuleAdapterExecutionReceipt,
+    research_experiment: Option<&str>,
+) -> Result<ModuleAction, Error> {
+    state.adapter_receipts.push(receipt.clone());
+    let action = if receipt.operation == crate::source_analysis::OPERATION {
+        crate::source_analysis::admit(parameters, profile, state, receipt.clone())?
+    } else if receipt.operation == crate::http_api::OPERATION {
+        crate::http_api::admit(parameters, profile, state, receipt.clone())?
+    } else if receipt.operation == crate::browser_client::OPERATION {
+        crate::browser_client::admit(parameters, profile, state, receipt.clone())?
+    } else if receipt.operation == crate::identity_access::OPERATION {
+        crate::identity_access::admit(parameters, profile, state, receipt.clone())?
+    } else if receipt.operation == crate::file_fuzz::OPERATION {
+        crate::file_fuzz::admit(parameters, profile, state, receipt.clone())?
+    } else if receipt.operation == crate::workflow_state::OPERATION {
+        crate::workflow_state::admit(parameters, profile, state, receipt.clone())?
+    } else if receipt.operation == crate::boundary_authority::OPERATION {
+        crate::boundary_authority::admit(parameters, profile, state, receipt.clone())?
+    } else if receipt.operation == crate::attack_graph::OPERATION {
+        crate::attack_graph::admit(parameters, profile, state, receipt.clone())?
+    } else if receipt.operation == crate::diamond_binding::OPERATION {
+        crate::diamond_binding::admit(parameters, profile, state, receipt.clone())?
+    } else if receipt.operation == crate::application_binding::OPERATION {
+        crate::application_binding::admit(parameters, profile, state, receipt.clone())?
+    } else {
+        reply(
+            format!(
+                "# Diagnostic adapter receipt\n\n- Runtime: `{}`\n- Operation: `{}`\n- Input digest: `{}`\n- Receipt decoder: `{}`\n- Executed by: `{}`\n\n```json\n{}\n```",
+                receipt.runtime_digest,
+                receipt.operation,
+                receipt.input_digest,
+                receipt.receipt_decoder,
+                receipt.executed_by,
+                serde_json::to_string_pretty(&receipt.observation)?,
+            ),
+            profile,
+            super::actions(state),
+            None,
+        )
+    };
+    if let Some(experiment_id) = research_experiment {
+        return crate::research_loop::admit_adapter_receipt(
+            parameters,
+            profile,
+            state,
+            experiment_id,
+            &receipt,
+        );
+    }
+    Ok(action)
 }
 
 fn next_key(state: &state::State, operation: &str) -> String {

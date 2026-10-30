@@ -23,5 +23,9 @@
 | [phase18-state-v16.json](phase18-state-v16.json) | Canonical empty Phase 18 private-network, TLS, policy, privilege, and delegated-authority checkpoint fixture. |
 | [phase19-state-v17.json](phase19-state-v17.json) | Canonical empty Phase 19 cross-adapter attack-graph, counterfactual, skeptic, and repair-replay checkpoint fixture. |
 | [phase20-state-v18.json](phase20-state-v18.json) | Canonical empty Phase 20 complete-campaign, shared-controls, restart-recovery, cleanup, and SARIF checkpoint fixture. |
+| [phase22-state-v19.json](phase22-state-v19.json) | Canonical empty schema-19/Phase 22 autonomous-research contract checkpoint with integrity-bound empty v2 collections. |
+| [research_poc.py](research_poc.py) | Stage 5 standalone private-destination stored-content canary PoC with exact target, identity, cleanup, and safe-twin checks. |
+| [repair_regression.py](repair_regression.py) | Stage 6 real-browser legitimate, malformed, adjacent, and bounded mutation matrix over one private patched twin, with literal destination and synthetic-identity refusal controls. |
+| [emulation-recipes/](emulation-recipes/AGENTS.md) | Inert licensed public-knowledge recipes with exact provenance, evidence class, harmless laboratory substitutions, adapter mappings, and explicit unsupported gaps. |
 
 [Parent waypoint](../AGENTS.md).

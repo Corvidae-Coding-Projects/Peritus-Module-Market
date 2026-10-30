@@ -362,11 +362,7 @@ fn catalog() -> ModuleAdapterCatalog {
                 crate::boundary_authority::OPERATION,
                 "peritus.boundary-authority.decoder@1",
             ),
-            descriptor(
-                crate::attack_graph::ADAPTER_ID,
-                crate::attack_graph::OPERATION,
-                "peritus.attack-graph.decoder@1",
-            ),
+            attack_graph_descriptor(),
             descriptor(
                 crate::diamond_binding::ADAPTER_ID,
                 crate::diamond_binding::OPERATION,
@@ -397,6 +393,37 @@ fn descriptor(adapter_id: &str, operation: &str, decoder: &str) -> ModuleAdapter
             receipt_schema: format!("{operation}.observation@1"),
         }],
         receipt_decoder: decoder.into(),
+    }
+}
+
+fn attack_graph_descriptor() -> ModuleAdapterDescriptor {
+    let operations = [
+        crate::attack_graph::OPERATION,
+        crate::runtime_chain_confirmation::OPERATION,
+        crate::runtime_chain_repair::OPERATION,
+    ];
+    let artifact = format!(
+        "peritus-red-team-module-worker\0{}\0{}\0v1",
+        crate::attack_graph::ADAPTER_ID,
+        operations.join("\0")
+    );
+    ModuleAdapterDescriptor {
+        schema: 1,
+        adapter_id: crate::attack_graph::ADAPTER_ID.into(),
+        version: env!("CARGO_PKG_VERSION").into(),
+        platform: platform(),
+        artifact_digest: digest(artifact.as_bytes()),
+        artifact_bytes: u64::try_from(artifact.len()).unwrap_or(u64::MAX),
+        license: "MIT".into(),
+        operations: operations
+            .into_iter()
+            .map(|operation| ModuleAdapterOperation {
+                name: operation.into(),
+                input_schema: format!("{operation}.request@2"),
+                receipt_schema: format!("{operation}.observation@2"),
+            })
+            .collect(),
+        receipt_decoder: "peritus.attack-graph.decoder@1".into(),
     }
 }
 
@@ -583,6 +610,30 @@ fn execute(
             let laboratory = laboratory(input);
             serde_json::to_value(crate::runtime_attack_graph::execute(
                 &campaign,
+                &input.request_key,
+                &worker_state_root()?,
+                &laboratory,
+            )?)
+            .map_err(json_error)?
+        }
+        crate::runtime_chain_confirmation::OPERATION => {
+            let confirmation: peritus_plugin_sdk::ModuleResearchChainConfirmationRequest =
+                serde_json::from_value(request.input.clone()).map_err(json_error)?;
+            let laboratory = laboratory(input);
+            serde_json::to_value(crate::runtime_chain_confirmation::execute(
+                &confirmation,
+                &input.request_key,
+                &worker_state_root()?,
+                &laboratory,
+            )?)
+            .map_err(json_error)?
+        }
+        crate::runtime_chain_repair::OPERATION => {
+            let repair: peritus_plugin_sdk::ModuleResearchRepairRequest =
+                serde_json::from_value(request.input.clone()).map_err(json_error)?;
+            let laboratory = laboratory(input);
+            serde_json::to_value(crate::runtime_chain_repair::execute(
+                &repair,
                 &input.request_key,
                 &worker_state_root()?,
                 &laboratory,

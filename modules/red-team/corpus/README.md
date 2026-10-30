@@ -25,6 +25,11 @@ two-worker schedule. `boundary-authority` contains matched Phase 18 applications
 DNS/HTTP/TLS peers, denied routable destinations, TLS trust policy, contained privilege, and
 delegated-authority cases. In all families the host observes effects independently of target text.
 
+`capability-projection-hidden` is an ordinary stateful vulnerable/safe application pair spanning
+source analysis, HTTP/API, and browser rendering. It contains no prewritten chain; Stage 2 may
+project only independently admitted existing-adapter receipts, and Stage 3 may search only the
+versioned compatibility and continuity rules over those projections.
+
 This is an adapter corpus, not evidence of coverage across all supported security families.
 Copy the selected cases into a disposable explicit application workspace before a campaign; the
 installed module never treats its own resources or arbitrary host paths as target authority.

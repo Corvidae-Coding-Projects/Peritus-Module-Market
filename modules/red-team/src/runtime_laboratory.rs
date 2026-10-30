@@ -30,6 +30,7 @@ pub(super) struct HttpLaboratory {
     state_path: PathBuf,
     secret: Vec<u8>,
     source_snapshot: String,
+    application_path: String,
     application_bytes: Vec<u8>,
     service_path: String,
     service_bytes: Vec<u8>,
@@ -91,6 +92,7 @@ pub(super) struct BrowserLaboratorySession {
 #[derive(Clone)]
 pub(super) struct AttackGraphLaboratorySession {
     pub(super) source_snapshot: String,
+    pub(super) application_path: String,
     pub(super) application_bytes: Vec<u8>,
     pub(super) application_digest: String,
     pub(super) service_path: String,
@@ -180,6 +182,7 @@ impl Broker {
     ) -> Result<AttackGraphLaboratorySession, String> {
         self.with_laboratory(laboratory_id, |laboratory| AttackGraphLaboratorySession {
             source_snapshot: laboratory.source_snapshot.clone(),
+            application_path: laboratory.application_path.clone(),
             application_bytes: laboratory.application_bytes.clone(),
             application_digest: digest(&laboratory.application_bytes),
             service_path: laboratory.service_path.clone(),
@@ -327,6 +330,7 @@ impl HttpLaboratory {
             state_path,
             secret,
             source_snapshot: source_snapshot.into(),
+            application_path: application_path.into(),
             application_bytes,
             service_path: service_path.into(),
             service_bytes,

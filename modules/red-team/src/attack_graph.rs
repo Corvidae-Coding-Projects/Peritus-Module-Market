@@ -197,9 +197,36 @@ fn ready_twins(
     Ok((vulnerable, repaired))
 }
 
-fn validate_observation(
+pub(crate) fn validate_observation(
     state: &state::State,
     observation: &ModuleAttackGraphObservation,
+) -> Result<(), Error> {
+    validate_observation_inner(state, observation, None)
+}
+
+pub(crate) fn validate_ephemeral_repair_observation(
+    state: &state::State,
+    observation: &ModuleAttackGraphObservation,
+    repaired_laboratory_id: &str,
+) -> Result<(), Error> {
+    if observation.repaired_laboratory_id != repaired_laboratory_id
+        || repaired_laboratory_id.len() != 64
+        || state
+            .laboratory_statuses
+            .iter()
+            .any(|status| status.handle.laboratory_id == repaired_laboratory_id)
+    {
+        return Err(invalid(
+            "Stage 6 attack-graph replay did not name one fresh ephemeral repaired laboratory",
+        ));
+    }
+    validate_observation_inner(state, observation, Some(repaired_laboratory_id))
+}
+
+fn validate_observation_inner(
+    state: &state::State,
+    observation: &ModuleAttackGraphObservation,
+    ephemeral_repaired_laboratory_id: Option<&str>,
 ) -> Result<(), Error> {
     if observation.schema != 1
         || observation.adapter_version != "peritus-attack-graph-2026-10-24.1"
@@ -219,6 +246,9 @@ fn validate_observation(
         return Err(invalid("attack-graph observation belongs to another source snapshot"));
     }
     for id in [&observation.vulnerable_laboratory_id, &observation.repaired_laboratory_id] {
+        if ephemeral_repaired_laboratory_id.is_some_and(|ephemeral| id == ephemeral) {
+            continue;
+        }
         let latest = state
             .laboratory_statuses
             .iter()

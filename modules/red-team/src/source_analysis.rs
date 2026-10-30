@@ -132,11 +132,12 @@ pub(crate) fn admit(
     let advanced =
         crate::coverage::record_static_method(state, &evidence_id, &observation.source_snapshot);
     state.pending = None;
+    crate::capability_projection::reconcile(state);
     state::save(parameters, state)?;
     Ok(reply(render(&observation, &evidence_id, advanced), profile, super::actions(state), None))
 }
 
-fn validate_observation(
+pub(crate) fn validate_observation(
     state: &state::State,
     observation: &ModuleSourceAnalysisObservation,
 ) -> Result<(), Error> {

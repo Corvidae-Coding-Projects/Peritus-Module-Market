@@ -204,7 +204,7 @@ dependencies = [
 
 [[package]]
 name = "peritus-red-team"
-version = "0.17.4"
+version = "0.25.0"
 dependencies = [
  "base64",
  "peritus-red-team-plugin-sdk",

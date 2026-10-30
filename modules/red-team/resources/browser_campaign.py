@@ -78,6 +78,19 @@ def main():
         for line in lines[1:]:
             name, value = line.split(":", 1)
             response_headers[name.strip()] = value.strip()
+        try:
+            declared_length = int(
+                next(
+                    value
+                    for name, value in response_headers.items()
+                    if name.lower() == "content-length"
+                )
+            )
+        except (StopIteration, ValueError):
+            raise RuntimeError("module browser response has no valid content length")
+        if declared_length < 0 or len(response_body) < declared_length:
+            raise RuntimeError("module browser response body is shorter than its content length")
+        response_body = response_body[:declared_length]
         return status, response_headers, response_body
 
     def request_route(route):

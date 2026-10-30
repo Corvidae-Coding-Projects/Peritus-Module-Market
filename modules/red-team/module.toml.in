@@ -2,9 +2,9 @@
 # This file is deliberately not a runnable package manifest and is not listed in market.toml.
 schema = 1
 id = "peritus.red-team"
-version = "0.17.4"
+version = "0.25.0"
 name = "Red Team"
-description = "Authorized defensive source investigation with a durable complete-campaign journey, static analysis, contained HTTP/API, isolated real-browser, module-private identity/access, file/archive/parser/native-fault, workflow/concurrency, network/TLS/authority probes, receipt-backed attack graphs, copy-only repair replay, and SARIF export."
+description = "Authorized defensive source investigation with bounded autonomous research roles, inert licensed emulation recipes, closed registered private-laboratory experiments, durable frontier recovery and steering, deterministic graph-v2 compatibility search, fresh chain confirmation, counterfactual and safe-twin replay, independent skepticism, private standalone PoC minimization, exact-preimage copy-only root-cause repair, adversarial mutation regression, independent patch review, source-proven private disclosure packages with redacted local export and no delivery operations, receipt-backed capability projection, typed provenance and rejections, schema-19 autonomous exploit-research contracts, bounded Stage 8 installed-product qualification, a durable complete-campaign journey, static analysis, contained HTTP/API, isolated real-browser, module-private identity/access, file/archive/parser/native-fault, workflow/concurrency, network/TLS/authority probes, receipt-backed graph-v1 campaigns, and SARIF export."
 resources = [
   "@EXECUTABLE@",
   "skills/red-team/SKILL.md",
@@ -26,8 +26,13 @@ resources = [
   "resources/phase18-state-v16.json",
   "resources/phase19-state-v17.json",
   "resources/phase20-state-v18.json",
+  "resources/phase22-state-v19.json",
   "resources/browser_campaign.py",
   "resources/attack_graph_browser.py",
+  "resources/research_poc.py",
+  "resources/repair_regression.py",
+  "resources/emulation-recipes/owasp-wstg-stored-xss-v4.2.json",
+  "QUALIFICATION.md",
   "resources/diamond_browser_campaign.py",
   "resources/generic_web_browser.py",
   "corpus/LICENSE",
@@ -113,15 +118,26 @@ resources = [
   "corpus/boundary-authority/shared-service.py",
   "corpus/boundary-authority/vulnerable/application.py",
   "corpus/boundary-authority/safe/application.py",
+  "corpus/capability-projection-hidden/README.md",
+  "corpus/capability-projection-hidden/vulnerable/application.py",
+  "corpus/capability-projection-hidden/vulnerable/service.py",
+  "corpus/capability-projection-hidden/safe/application.py",
+  "corpus/capability-projection-hidden/safe/service.py",
   "src/main.rs",
   "src/lib.rs",
   "src/adapter.rs",
   "src/application_binding.rs",
   "src/attack_graph.rs",
   "src/browser_client.rs",
+  "src/capability_graph.rs",
+  "src/capability_projection.rs",
+  "src/chain_confirmation.rs",
+  "src/chain_repair.rs",
   "src/boundary_authority.rs",
   "src/coverage.rs",
   "src/diamond_binding.rs",
+  "src/disclosure.rs",
+  "src/emulation_recipes.rs",
   "src/http_api.rs",
   "src/identity_access.rs",
   "src/file_fuzz.rs",
@@ -129,8 +145,11 @@ resources = [
   "src/investigation.rs",
   "src/journey.rs",
   "src/laboratory.rs",
+  "src/qualification.rs",
   "src/repair.rs",
   "src/report.rs",
+  "src/research.rs",
+  "src/research_loop.rs",
   "src/source_analysis.rs",
   "src/source_analysis_worker.rs",
   "src/worker.rs",
@@ -145,6 +164,8 @@ resources = [
   "src/runtime_workflow_state.rs",
   "src/runtime_boundary_authority.rs",
   "src/runtime_attack_graph.rs",
+  "src/runtime_chain_confirmation.rs",
+  "src/runtime_chain_repair.rs",
   "src/records.rs",
   "src/state.rs",
   "Cargo.toml",

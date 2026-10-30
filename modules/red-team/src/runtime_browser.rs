@@ -17,6 +17,8 @@ use std::{
 const MAXIMUM_RESULT_BYTES: u64 = 256 * 1024;
 const BROWSER_CAMPAIGN: &str = include_str!("../resources/browser_campaign.py");
 const ATTACK_GRAPH_BROWSER: &str = include_str!("../resources/attack_graph_browser.py");
+pub(super) const RESEARCH_POC: &str = include_str!("../resources/research_poc.py");
+pub(super) const REPAIR_REGRESSION: &str = include_str!("../resources/repair_regression.py");
 const DIAMOND_BROWSER: &str = include_str!("../resources/diamond_browser_campaign.py");
 const GENERIC_WEB_BROWSER: &str = include_str!("../resources/generic_web_browser.py");
 
@@ -63,6 +65,60 @@ pub(super) fn attack_graph(
             ("--maximum-requests".into(), maximum_requests.to_string().into()),
         ],
         Duration::from_secs(45),
+    )
+}
+
+pub(super) fn research_poc(
+    directory: &Path,
+    target: &peritus_plugin_sdk::ModuleResearchPocTargetIdentity,
+    destination: &str,
+    synthetic_identity: &str,
+    expect_vulnerable: bool,
+    maximum_actions: u32,
+    maximum_requests: u32,
+) -> Result<Value, String> {
+    let root = std::env::current_dir().map_err(|error| error.to_string())?;
+    run(
+        directory,
+        "research_poc.py",
+        RESEARCH_POC,
+        vec![
+            ("--target-root".into(), root.into_os_string()),
+            ("--application-path".into(), target.application_path.clone().into()),
+            ("--application-digest".into(), target.application_digest.clone().into()),
+            ("--service-path".into(), target.service_path.clone().into()),
+            ("--service-digest".into(), target.service_digest.clone().into()),
+            ("--target-identity".into(), target.target_identity.clone().into()),
+            ("--destination".into(), destination.into()),
+            ("--synthetic-identity".into(), synthetic_identity.into()),
+            ("--expect".into(), if expect_vulnerable { "vulnerable" } else { "safe" }.into()),
+            ("--maximum-actions".into(), maximum_actions.to_string().into()),
+            ("--maximum-requests".into(), maximum_requests.to_string().into()),
+        ],
+        Duration::from_secs(60),
+    )
+}
+
+pub(super) fn repair_regression(
+    directory: &Path,
+    target_socket: &Path,
+    destination: &str,
+    synthetic_identity: &str,
+    maximum_actions: u32,
+    maximum_requests: u32,
+) -> Result<Value, String> {
+    run(
+        directory,
+        "repair_regression.py",
+        REPAIR_REGRESSION,
+        vec![
+            ("--target-socket".into(), target_socket.as_os_str().to_owned()),
+            ("--destination".into(), destination.into()),
+            ("--synthetic-identity".into(), synthetic_identity.into()),
+            ("--maximum-actions".into(), maximum_actions.to_string().into()),
+            ("--maximum-requests".into(), maximum_requests.to_string().into()),
+        ],
+        Duration::from_secs(90),
     )
 }
 

@@ -43,6 +43,25 @@ pub(super) fn execute(
     host_state: &Path,
     laboratory: &Broker,
 ) -> Result<ModuleAttackGraphObservation, String> {
+    execute_with_retention(request, identity, host_state, laboratory, true)
+}
+
+pub(super) fn execute_fresh(
+    request: &ModuleAttackGraphCampaignRequest,
+    identity: &str,
+    host_state: &Path,
+    laboratory: &Broker,
+) -> Result<ModuleAttackGraphObservation, String> {
+    execute_with_retention(request, identity, host_state, laboratory, false)
+}
+
+fn execute_with_retention(
+    request: &ModuleAttackGraphCampaignRequest,
+    identity: &str,
+    host_state: &Path,
+    laboratory: &Broker,
+    allow_retained: bool,
+) -> Result<ModuleAttackGraphObservation, String> {
     validate(request)?;
     let vulnerable = laboratory.attack_graph_session(
         &request.vulnerable_laboratory_id,
@@ -85,7 +104,7 @@ pub(super) fn execute(
         .as_bytes(),
     );
     let retained = root.join(&retained_id).join("observation.json");
-    if retained.is_file() && !retained.is_symlink() {
+    if allow_retained && retained.is_file() && !retained.is_symlink() {
         let observation: ModuleAttackGraphObservation =
             serde_json::from_slice(&fs::read(&retained).map_err(|error| error.to_string())?)
                 .map_err(|error| {
@@ -417,10 +436,12 @@ pub(super) fn execute(
     if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > request.maximum_artifact_bytes {
         return Err("attack-graph observation exceeds its admitted artifact bound".into());
     }
-    write_private(&staging.path().join("observation.json"), &bytes)?;
-    let destination = root.join(retained_id);
-    fs::rename(staging.keep(), &destination)
-        .map_err(|error| format!("retain attack-graph campaign: {error}"))?;
+    if allow_retained {
+        write_private(&staging.path().join("observation.json"), &bytes)?;
+        let destination = root.join(retained_id);
+        fs::rename(staging.keep(), &destination)
+            .map_err(|error| format!("retain attack-graph campaign: {error}"))?;
+    }
     Ok(observation)
 }
 

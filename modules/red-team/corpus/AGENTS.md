@@ -15,6 +15,7 @@ Small MIT-licensed executable applications used through the real contained proof
 | [file-parser](file-parser/AGENTS.md) | Phase 16 vulnerable/safe twins for file, link, temporary-name, permission, TAR, structured-parser, and child-native-fault oracles. |
 | [workflow-state](workflow-state/AGENTS.md) | Phase 17 vulnerable/safe twins for approval, accounting, retry, cancellation, crash-recovery, quota, and deterministic concurrency oracles. |
 | [boundary-authority](boundary-authority/AGENTS.md) | Phase 18 vulnerable/safe twins for module-private network peers, TLS policy, contained privilege, and delegated-authority oracles. |
+| [capability-projection-hidden](capability-projection-hidden/AGENTS.md) | Hidden ordinary-application vulnerable/safe pair spanning source-analysis, HTTP/API, and browser receipts without a prewritten chain; Stage 3 searches only their projected types and continuity. |
 | [LICENSE](LICENSE) | MIT license covering the corpus programs. |
 | [README.md](README.md) | Corpus purpose and authority boundary. |
 

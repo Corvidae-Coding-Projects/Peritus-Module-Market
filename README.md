@@ -27,7 +27,7 @@ remain retained.
 | Module | Code and function |
 | --- | --- |
 | [Deep Research](modules/deep-research/) | Native Rust planner, gatherer, skeptical source admission, synthesis, final fact-checking, persistent evidence ledger, and report generation. |
-| [Red Team](modules/red-team/) | Source-built Rust defensive harness with a durable guided complete campaign, scoped source, class-specific real-interface adapters, receipt-backed cross-adapter attack graphs, copy-only repair replay, and Markdown/JSON/SARIF evidence exports. |
+| [Red Team](modules/red-team/) | Source-built Rust defensive harness with bounded autonomous research roles, inert licensed emulation recipes, closed private-laboratory experiments, fresh chain confirmation, counterfactual and safe-twin controls, independent skepticism, private standalone PoCs, exact-preimage copy-only root-cause repair, adversarial regression and independent patch review, source-proven private disclosure packages with local export and no delivery operations, bounded Stage 8 installed-product qualification, scoped source, class-specific real-interface adapters, receipt-backed attack graphs, and Markdown/JSON/SARIF evidence exports. |
 
 Red Team is deliberately absent from the legacy executable `market.toml`; no generated binary is
 committed. Current Linux hosts discover it through the additive `sources.toml`, show **Build and

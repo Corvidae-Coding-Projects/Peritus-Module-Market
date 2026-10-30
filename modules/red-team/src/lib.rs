@@ -5,22 +5,33 @@ mod application_binding;
 mod attack_graph;
 mod boundary_authority;
 mod browser_client;
+mod capability_graph;
+mod capability_projection;
+mod chain_confirmation;
+mod chain_repair;
 mod coverage;
 mod diamond_binding;
+mod disclosure;
+mod emulation_recipes;
 mod file_fuzz;
 mod http_api;
 mod identity_access;
 mod investigation;
 mod journey;
 mod laboratory;
+mod qualification;
 pub mod records;
 mod repair;
 mod report;
+mod research;
+mod research_loop;
 mod runtime_application;
 mod runtime_attack_graph;
 mod runtime_boundary_authority;
 mod runtime_browser;
 mod runtime_browser_client;
+mod runtime_chain_confirmation;
+mod runtime_chain_repair;
 mod runtime_diamond;
 mod runtime_file_fuzz;
 mod runtime_http_api;
@@ -112,7 +123,9 @@ pub enum Error {
 /// Dispatches one module-owned native workflow operation.
 pub fn dispatch(method: &str, parameters: &Value) -> Result<Value, Error> {
     if method == "tool" {
-        return if repair::owns_key(parameters) {
+        return if research_loop::owns_key(parameters) {
+            research_loop::tool(parameters)
+        } else if repair::owns_key(parameters) {
             repair::tool(parameters)
         } else {
             investigation::tool(parameters)
@@ -123,7 +136,9 @@ pub fn dispatch(method: &str, parameters: &Value) -> Result<Value, Error> {
         "checkpoint_ack" => checkpoint_ack(parameters)?,
         "host_result" => host_result(parameters)?,
         "model_result" => {
-            if repair::owns_key(parameters) {
+            if research_loop::owns_key(parameters) {
+                research_loop::model_result(parameters)?
+            } else if repair::owns_key(parameters) {
                 repair::model_result(parameters)?
             } else {
                 investigation::model_result(parameters)?
@@ -153,6 +168,111 @@ fn command(parameters: &Value) -> Result<ModuleAction, Error> {
         return checkpoint(parameters, &host);
     }
     let mut state = state::load(parameters)?;
+    if command == "research-qualification" {
+        return Ok(qualification::command(&host, &state));
+    }
+    if command == "research" {
+        return Ok(reply(research::status_view(&state), &host, actions(&state), None));
+    }
+    if command == "research-history" {
+        return Ok(reply(research::history_view(&state), &host, actions(&state), None));
+    }
+    if command == "capability-project" {
+        let summary = capability_projection::reconcile(&mut state);
+        state::save(parameters, &state)?;
+        return Ok(reply(
+            format!(
+                "# Capability projection reconciled\n\n- Receipt-backed primitives: {}\n- Rejected candidates: {}\n\nThe projection revalidated retained class-specific evidence only. It ran no model, worker, laboratory, attack, graph search, export, or delivery operation.",
+                summary.projected, summary.rejected
+            ),
+            &host,
+            actions(&state),
+            None,
+        ));
+    }
+    if command == "capabilities" {
+        return Ok(reply(research::capability_view(&state), &host, actions(&state), None));
+    }
+    if command == "capability-history" {
+        return Ok(reply(research::capability_history_view(&state), &host, actions(&state), None));
+    }
+    if command == "graph-v2" {
+        return Ok(reply(research::graph_view(&state), &host, actions(&state), None));
+    }
+    if command == "graph-v2-history" {
+        return Ok(reply(research::graph_history_view(&state), &host, actions(&state), None));
+    }
+    if command == "graph-v2-experiments" {
+        return Ok(reply(research::graph_experiment_view(&state), &host, actions(&state), None));
+    }
+    if command == "graph-v2-build" || command.starts_with("graph-v2-build ") {
+        let arguments = command.strip_prefix("graph-v2-build").unwrap_or_default().trim();
+        let bounds = capability_graph::parse_bounds(arguments)?;
+        capability_projection::reconcile(&mut state);
+        let summary = capability_graph::build(&mut state, bounds, Default::default())?;
+        state::save(parameters, &state)?;
+        return Ok(reply(
+            format!(
+                "# Graph-v2 search complete\n\n- Graph: `{}`\n- Nodes / edges: {} / {}\n- Candidate / counterfactual-broken chains: {} / {}\n- Rejected relations: {}\n- Unscheduled experiment specifications: {}\n- Search truncated: {}\n- Existing graph reused: {}\n\nThis deterministic Stage 3 search ran no model, worker, laboratory, target operation, replay, or experiment. Candidate chains are not confirmed exploit chains.",
+                summary.graph_id,
+                summary.nodes,
+                summary.edges,
+                summary.candidates,
+                summary.broken,
+                summary.rejected_edges,
+                summary.experiments,
+                summary.truncated,
+                summary.reused,
+            ),
+            &host,
+            actions(&state),
+            None,
+        ));
+    }
+    if let Some(capability) = command.strip_prefix("graph-v2-break ") {
+        let capability = capability.trim();
+        if capability.is_empty() || capability.contains(char::is_whitespace) {
+            return Err(invalid(
+                "use `graph-v2-break CAPABILITY_ID` with one admitted primitive identity",
+            ));
+        }
+        capability_projection::reconcile(&mut state);
+        let summary = capability_graph::build(
+            &mut state,
+            capability_graph::default_bounds(),
+            std::collections::BTreeSet::from([capability.to_owned()]),
+        )?;
+        state::save(parameters, &state)?;
+        return Ok(reply(
+            format!(
+                "# Graph-v2 counterfactual complete\n\n- Graph: `{}`\n- Removed prerequisite: `{capability}`\n- Broken chains: {}\n- Unaffected candidate chains: {}\n- Nodes / edges retained: {} / {}\n- Search truncated: {}\n\nThe admitted capability catalog was not changed. This was a deterministic graph counterfactual only; no target operation or replay ran.",
+                summary.graph_id,
+                summary.broken,
+                summary.candidates,
+                summary.nodes,
+                summary.edges,
+                summary.truncated,
+            ),
+            &host,
+            actions(&state),
+            None,
+        ));
+    }
+    if emulation_recipes::handles(command) {
+        return emulation_recipes::command(parameters, &host, &mut state, command);
+    }
+    if research_loop::handles(command) {
+        return research_loop::command(parameters, &host, &mut state, command);
+    }
+    if chain_confirmation::handles(command) {
+        return chain_confirmation::command(parameters, &host, &mut state, command);
+    }
+    if chain_repair::handles(command) {
+        return chain_repair::command(parameters, &host, &mut state, command);
+    }
+    if disclosure::handles(command) {
+        return disclosure::command(parameters, &host, &mut state, command);
+    }
     if journey::handles(command) {
         return journey::command(parameters, &host, &mut state, command);
     }
@@ -256,7 +376,7 @@ fn command(parameters: &Value) -> Result<ModuleAction, Error> {
         return cancel_job(parameters, &host, &mut state, command);
     }
     Ok(reply(
-        "Unknown Red Team command. Use campaign-plan, campaign-start, campaign, campaign-next, campaign-pause, campaign-resume, campaign-steer DETAILS, campaign-retry, campaign-skip, campaign-abort, start, status, pause, resume, steer DETAILS, scope, refresh, profiles, surfaces, methods, coverage, analyzers, analyzer-install, analyze, analysis-history, analyzer-status, analyzer-remove, diamond, diamond-install, diamond-run, diamond-status, diamond-remove, api, api-install, api-run, api-history, api-status, api-remove, browser, browser-install, browser-run, browser-history, browser-status, browser-remove, identity, identity-install, identity-run, identity-history, file-fuzz, file-fuzz-install, file-fuzz-run, file-fuzz-history, file-fuzz-status, file-fuzz-remove, workflow, workflow-install, workflow-run, workflow-history, workflow-status, workflow-remove, boundary, boundary-install, boundary-run, boundary-history, boundary-status, boundary-remove, graph, graph-install, graph-run, graph-history, graph-status, graph-remove, laboratories, lab-create source, lab-prepare, lab-launch, lab-run-auto, lab-run RUNTIME ENTRYPOINT [ARGS...], lab-run-json JSON, lab-status, lab-select VALUE, lab-snapshot, lab-reset, lab-stop, lab-teardown, compatibility fixture commands, adapters, adapter-install diagnostic, adapter-stage diagnostic, adapter-complete, adapter-cancel, adapter-status, adapter-run MESSAGE, adapter-remove, manifest, observe PATH [offset=N] [bytes=N], probe PATH [input=LITERAL], jobs, job ID, job-log ID STREAM [offset=N] [bytes=N], job-cancel ID, findings, patches, report, report-json, sarif, bundle, revoke, compatibility, contract, or checkpoint.",
+        "Unknown Red Team command. Use research, research-history, research-qualification, research-recipes, research-recipe RECIPE_ID, research-recipe-seed RECIPE_ID, research-roles, research-start [turns=N experiments=N cost=N], research-frontier, research-next, research-pause, research-resume, research-cancel, research-steer DETAILS, research-prioritize OPERATION, research-exclude OPERATION, capability-project, capabilities, capability-history, graph-v2, graph-v2-build [nodes=N edges=N depth=N open=N cycles=N cost=N], graph-v2-break CAPABILITY_ID, graph-v2-history, graph-v2-experiments, poc-plan, poc-start [CHAIN_ID], poc-history, poc-cancel, repair-plan, repair-start [POC_BUNDLE_ID], repair-history, repair-cancel, disclosure-plan, disclosure-start [REPAIR_BUNDLE_ID], disclosure-review [PACKAGE_ID], disclosure-export [PACKAGE_ID], disclosure-show PACKAGE_ID, disclosure-history, disclosure-cancel, campaign-plan, campaign-start, campaign, campaign-next, campaign-pause, campaign-resume, campaign-steer DETAILS, campaign-retry, campaign-skip, campaign-abort, start, status, pause, resume, steer DETAILS, scope, refresh, profiles, surfaces, methods, coverage, analyzers, analyzer-install, analyze, analysis-history, analyzer-status, analyzer-remove, diamond, diamond-install, diamond-run, diamond-status, diamond-remove, api, api-install, api-run, api-history, api-status, api-remove, browser, browser-install, browser-run, browser-history, browser-status, browser-remove, identity, identity-install, identity-run, identity-history, file-fuzz, file-fuzz-install, file-fuzz-run, file-fuzz-history, file-fuzz-status, file-fuzz-remove, workflow, workflow-install, workflow-run, workflow-history, workflow-status, workflow-remove, boundary, boundary-install, boundary-run, boundary-history, boundary-status, boundary-remove, graph, graph-install, graph-run, graph-history, graph-status, graph-remove, laboratories, lab-create source, lab-prepare, lab-launch, lab-run-auto, lab-run RUNTIME ENTRYPOINT [ARGS...], lab-run-json JSON, lab-status, lab-select VALUE, lab-snapshot, lab-reset, lab-stop, lab-teardown, compatibility fixture commands, adapters, adapter-install diagnostic, adapter-stage diagnostic, adapter-complete, adapter-cancel, adapter-status, adapter-run MESSAGE, adapter-remove, manifest, observe PATH [offset=N] [bytes=N], probe PATH [input=LITERAL], jobs, job ID, job-log ID STREAM [offset=N] [bytes=N], job-cancel ID, findings, patches, report, report-json, sarif, bundle, revoke, compatibility, contract, or checkpoint.",
         &host,
         actions(&state),
         None,
@@ -632,6 +752,7 @@ pub(crate) fn resume_pending(
             | PendingRequest::AdapterStatus { .. }
             | PendingRequest::AdapterRemove { .. }
             | PendingRequest::AdapterExecute { .. }
+            | PendingRequest::ResearchExperimentExecute { .. }
     ) {
         return adapter::resume_worker(state, pending);
     }
@@ -642,7 +763,8 @@ pub(crate) fn resume_pending(
         | PendingRequest::AdapterCancel { .. }
         | PendingRequest::AdapterStatus { .. }
         | PendingRequest::AdapterRemove { .. }
-        | PendingRequest::AdapterExecute { .. } => unreachable!("handled above"),
+        | PendingRequest::AdapterExecute { .. }
+        | PendingRequest::ResearchExperimentExecute { .. } => unreachable!("handled above"),
         PendingRequest::LaboratoryCatalog { .. } => (
             HOST_CAPABILITY_APPLICATION_LABORATORY,
             "catalog",
@@ -703,6 +825,27 @@ pub(crate) fn resume_pending(
                 path: path.clone(),
                 offset: *offset,
                 maximum_bytes: *maximum_bytes,
+            })?,
+        ),
+        PendingRequest::DisclosureManifest { authority, after, .. } => (
+            HOST_CAPABILITY_SCOPED_SOURCE,
+            "manifest",
+            serde_json::to_value(ScopedSourceManifestRequest {
+                schema: 1,
+                authority: authority.clone(),
+                after: after.clone(),
+                maximum_entries: 100,
+            })?,
+        ),
+        PendingRequest::DisclosureContactRead { authority, expected, .. } => (
+            HOST_CAPABILITY_SCOPED_SOURCE,
+            "read",
+            serde_json::to_value(ScopedSourceReadRequest {
+                schema: 1,
+                authority: authority.clone(),
+                path: expected.path.clone(),
+                offset: 0,
+                maximum_bytes: expected.bytes,
             })?,
         ),
         PendingRequest::Revoke { authority, .. } => (
@@ -778,6 +921,41 @@ fn host_result(parameters: &Value) -> Result<ModuleAction, Error> {
             if expected_capability == HOST_CAPABILITY_APPLICATION_LABORATORY {
                 state.laboratory_errors.push(format!("unsupported: {detail}"));
             }
+            if result.key.starts_with("red-team-chain-confirm-") {
+                chain_confirmation::host_failure(&mut state, &pending, &detail);
+                state::save(parameters, &state)?;
+                return Ok(reply(
+                    format!(
+                        "Stage 5 was blocked by an unsupported host capability: {detail}. No PoC artifact was emitted."
+                    ),
+                    &host,
+                    actions(&state),
+                    None,
+                ));
+            }
+            if result.key.starts_with("red-team-chain-repair-") {
+                chain_repair::host_failure(&mut state, &pending, &detail);
+                state::save(parameters, &state)?;
+                return Ok(reply(
+                    format!(
+                        "Stage 6 was blocked by an unsupported host capability: {detail}. No repair was accepted."
+                    ),
+                    &host,
+                    actions(&state),
+                    None,
+                ));
+            }
+            if let PendingRequest::DisclosureManifest { repair_bundle_id, .. }
+            | PendingRequest::DisclosureContactRead { repair_bundle_id, .. } = &pending
+            {
+                return disclosure::contact_unavailable(
+                    parameters,
+                    &host,
+                    &mut state,
+                    repair_bundle_id,
+                    &format!("unsupported host capability: {detail}"),
+                );
+            }
             if result.key.starts_with("red-team-repair-") {
                 repair::host_failure(&mut state, &detail);
                 state::save(parameters, &state)?;
@@ -787,6 +965,15 @@ fn host_result(parameters: &Value) -> Result<ModuleAction, Error> {
                 investigation::host_failure(&mut state, &pending, &detail);
                 state::save(parameters, &state)?;
                 return investigation::next(parameters, &host, &mut state);
+            }
+            if let PendingRequest::ResearchExperimentExecute { experiment_id, .. } = &pending {
+                return research_loop::host_failure(
+                    parameters,
+                    &host,
+                    &mut state,
+                    experiment_id,
+                    &format!("unsupported host capability: {detail}"),
+                );
             }
             state::save(parameters, &state)?;
             return Ok(reply(
@@ -805,6 +992,49 @@ fn host_result(parameters: &Value) -> Result<ModuleAction, Error> {
             if expected_capability == HOST_CAPABILITY_APPLICATION_LABORATORY {
                 state.laboratory_errors.push(format!("{code}: {detail}"));
             }
+            if result.key.starts_with("red-team-chain-confirm-") {
+                chain_confirmation::host_failure(
+                    &mut state,
+                    &pending,
+                    &format!("host rejection {code}: {detail}"),
+                );
+                state::save(parameters, &state)?;
+                return Ok(reply(
+                    format!(
+                        "Stage 5 was rejected by the host (`{code}`): {detail}. No PoC artifact was emitted."
+                    ),
+                    &host,
+                    actions(&state),
+                    None,
+                ));
+            }
+            if result.key.starts_with("red-team-chain-repair-") {
+                chain_repair::host_failure(
+                    &mut state,
+                    &pending,
+                    &format!("host rejection {code}: {detail}"),
+                );
+                state::save(parameters, &state)?;
+                return Ok(reply(
+                    format!(
+                        "Stage 6 was rejected by the host (`{code}`): {detail}. No repair was accepted."
+                    ),
+                    &host,
+                    actions(&state),
+                    None,
+                ));
+            }
+            if let PendingRequest::DisclosureManifest { repair_bundle_id, .. }
+            | PendingRequest::DisclosureContactRead { repair_bundle_id, .. } = &pending
+            {
+                return disclosure::contact_unavailable(
+                    parameters,
+                    &host,
+                    &mut state,
+                    repair_bundle_id,
+                    &format!("host rejection {code}: {detail}"),
+                );
+            }
             if result.key.starts_with("red-team-repair-") {
                 repair::host_failure(&mut state, &format!("host rejection {code}: {detail}"));
                 state::save(parameters, &state)?;
@@ -818,6 +1048,15 @@ fn host_result(parameters: &Value) -> Result<ModuleAction, Error> {
                 );
                 state::save(parameters, &state)?;
                 return investigation::next(parameters, &host, &mut state);
+            }
+            if let PendingRequest::ResearchExperimentExecute { experiment_id, .. } = &pending {
+                return research_loop::host_failure(
+                    parameters,
+                    &host,
+                    &mut state,
+                    experiment_id,
+                    &format!("host rejected operation {code}: {detail}"),
+                );
             }
             state::save(parameters, &state)?;
             return Ok(reply(
@@ -835,6 +1074,53 @@ fn host_result(parameters: &Value) -> Result<ModuleAction, Error> {
             }
             if expected_capability == HOST_CAPABILITY_APPLICATION_LABORATORY {
                 state.laboratory_errors.push(format!("{code}: {detail}"));
+            }
+            if result.key.starts_with("red-team-chain-confirm-") {
+                chain_confirmation::host_failure(
+                    &mut state,
+                    &pending,
+                    &format!(
+                        "host failure {code}: {detail}; retryable={retryable_with_new_action}"
+                    ),
+                );
+                state::save(parameters, &state)?;
+                return Ok(reply(
+                    format!(
+                        "Stage 5 failed safely (`{code}`): {detail}. No incomplete PoC artifact was admitted."
+                    ),
+                    &host,
+                    actions(&state),
+                    None,
+                ));
+            }
+            if result.key.starts_with("red-team-chain-repair-") {
+                chain_repair::host_failure(
+                    &mut state,
+                    &pending,
+                    &format!(
+                        "host failure {code}: {detail}; retryable={retryable_with_new_action}"
+                    ),
+                );
+                state::save(parameters, &state)?;
+                return Ok(reply(
+                    format!("Stage 6 failed safely (`{code}`): {detail}. No repair was accepted."),
+                    &host,
+                    actions(&state),
+                    None,
+                ));
+            }
+            if let PendingRequest::DisclosureManifest { repair_bundle_id, .. }
+            | PendingRequest::DisclosureContactRead { repair_bundle_id, .. } = &pending
+            {
+                return disclosure::contact_unavailable(
+                    parameters,
+                    &host,
+                    &mut state,
+                    repair_bundle_id,
+                    &format!(
+                        "host failure {code}: {detail}; retryable={retryable_with_new_action}"
+                    ),
+                );
             }
             if result.key.starts_with("red-team-repair-") {
                 repair::host_failure(
@@ -856,6 +1142,17 @@ fn host_result(parameters: &Value) -> Result<ModuleAction, Error> {
                 );
                 state::save(parameters, &state)?;
                 return investigation::next(parameters, &host, &mut state);
+            }
+            if let PendingRequest::ResearchExperimentExecute { experiment_id, .. } = &pending {
+                return research_loop::host_failure(
+                    parameters,
+                    &host,
+                    &mut state,
+                    experiment_id,
+                    &format!(
+                        "host failure {code}: {detail}; retryable={retryable_with_new_action}"
+                    ),
+                );
             }
             state::save(parameters, &state)?;
             return Ok(reply(
@@ -959,7 +1256,8 @@ fn host_result(parameters: &Value) -> Result<ModuleAction, Error> {
         | PendingRequest::AdapterCancel { .. }
         | PendingRequest::AdapterStatus { .. }
         | PendingRequest::AdapterRemove { .. }
-        | PendingRequest::AdapterExecute { .. } => {
+        | PendingRequest::AdapterExecute { .. }
+        | PendingRequest::ResearchExperimentExecute { .. } => {
             return Err(invalid("adapter host result was routed through a non-adapter capability"));
         }
         PendingRequest::LaboratoryCatalog { .. }
@@ -1049,6 +1347,33 @@ fn host_result(parameters: &Value) -> Result<ModuleAction, Error> {
             }
             text
         }
+        PendingRequest::DisclosureManifest {
+            repair_bundle_id,
+            authority,
+            after,
+            candidates,
+            ..
+        } => {
+            let page: ScopedSourceManifestPage = serde_json::from_value(output)?;
+            return disclosure::manifest_result(
+                parameters,
+                &host,
+                &mut state,
+                (repair_bundle_id, authority, after, candidates),
+                page,
+            );
+        }
+        PendingRequest::DisclosureContactRead { repair_bundle_id, expected, .. } => {
+            let read: ScopedSourceReadResult = serde_json::from_value(output)?;
+            return disclosure::contact_result(
+                parameters,
+                &host,
+                &mut state,
+                repair_bundle_id,
+                expected,
+                read,
+            );
+        }
         PendingRequest::Revoke { .. } => {
             let observation: ScopedSourceRevocation = serde_json::from_value(output)?;
             state.campaign.state = CampaignState::Paused;
@@ -1103,6 +1428,12 @@ fn host_result(parameters: &Value) -> Result<ModuleAction, Error> {
                 content,
             )
         }
+        PendingRequest::SourceVerify { key, .. }
+            if key.starts_with("red-team-chain-repair-verify-") =>
+        {
+            let verification: ScopedSourceVerification = serde_json::from_value(output)?;
+            return chain_repair::original_verified(parameters, &host, &mut state, verification);
+        }
         PendingRequest::SourceVerify { .. } => {
             let verification: ScopedSourceVerification = serde_json::from_value(output)?;
             repair::original_verified(&mut state, verification.clone());
@@ -1137,10 +1468,35 @@ fn terminal_worker_failure(
         state::save(parameters, state)?;
         return repair::next(parameters, host, state);
     }
+    if result_key.starts_with("red-team-chain-confirm-") {
+        chain_confirmation::host_failure(state, pending, &detail);
+        state::save(parameters, state)?;
+        return Ok(reply(
+            format!("Stage 5 failed safely and emitted no incomplete PoC artifact.\n\n{detail}"),
+            host,
+            actions(state),
+            None,
+        ));
+    }
+    if result_key.starts_with("red-team-chain-repair-") {
+        chain_repair::host_failure(state, pending, &detail);
+        state::save(parameters, state)?;
+        return Ok(reply(
+            format!(
+                "Stage 6 failed safely and accepted no incomplete repair evidence.\n\n{detail}"
+            ),
+            host,
+            actions(state),
+            None,
+        ));
+    }
     if result_key.starts_with("red-team-investigation-") {
         investigation::host_failure(state, pending, &detail);
         state::save(parameters, state)?;
         return investigation::next(parameters, host, state);
+    }
+    if let PendingRequest::ResearchExperimentExecute { experiment_id, .. } = pending {
+        return research_loop::host_failure(parameters, host, state, experiment_id, &detail);
     }
     state::save(parameters, state)?;
     Ok(reply(
@@ -1161,7 +1517,8 @@ fn pending_capability(pending: &PendingRequest) -> &'static str {
         | PendingRequest::AdapterCancel { .. }
         | PendingRequest::AdapterStatus { .. }
         | PendingRequest::AdapterRemove { .. }
-        | PendingRequest::AdapterExecute { .. } => HOST_CAPABILITY_WORKER,
+        | PendingRequest::AdapterExecute { .. }
+        | PendingRequest::ResearchExperimentExecute { .. } => HOST_CAPABILITY_WORKER,
         PendingRequest::LaboratoryCatalog { .. }
         | PendingRequest::LaboratoryCreate { .. }
         | PendingRequest::LaboratorySourceCreate { .. }
@@ -1170,6 +1527,8 @@ fn pending_capability(pending: &PendingRequest) -> &'static str {
         PendingRequest::Capture { .. }
         | PendingRequest::Manifest { .. }
         | PendingRequest::Read { .. }
+        | PendingRequest::DisclosureManifest { .. }
+        | PendingRequest::DisclosureContactRead { .. }
         | PendingRequest::Revoke { .. }
         | PendingRequest::SourceVerify { .. } => HOST_CAPABILITY_SCOPED_SOURCE,
         PendingRequest::JobSubmit { .. } => HOST_CAPABILITY_WORKER,
@@ -1872,6 +2231,37 @@ fn actions(state: &State) -> Vec<ModuleMenuAction> {
         }
     }
     result.extend([
+        action("Autonomous research contracts", "research", true),
+        action("Research qualification matrix", "research-qualification", true),
+        action("Autonomous research history", "research-history", true),
+        action("Inert emulation recipes", "research-recipes", true),
+        action("Reconcile capability projection", "capability-project", true),
+        action("Receipt-backed capabilities", "capabilities", true),
+        action("Capability projection history", "capability-history", true),
+        action("Build deterministic graph-v2", "graph-v2-build", true),
+        action("Inspect latest graph-v2", "graph-v2", true),
+        action("Graph-v2 history", "graph-v2-history", true),
+        action("Unresolved graph-v2 experiments", "graph-v2-experiments", true),
+        action("Stage 4 research roles", "research-roles", true),
+        action("Start bounded Stage 4 research", "research-start", true),
+        action("Stage 4 experiment frontier", "research-frontier", true),
+        action("Schedule next Stage 4 step", "research-next", true),
+        action("Pause Stage 4 research", "research-pause", true),
+        action("Resume Stage 4 research", "research-resume", true),
+        action("Cancel Stage 4 research", "research-cancel", true),
+        action("Stage 5 confirmation plan", "poc-plan", true),
+        action("Confirm chain and generate private PoC", "poc-start", true),
+        action("Private PoC history", "poc-history", true),
+        action("Stage 6 root-cause repair plan", "repair-plan", true),
+        action("Repair and adversarially regress verified PoC", "repair-start", true),
+        action("Private repair history", "repair-history", true),
+        action("Cancel Stage 6 repair", "repair-cancel", true),
+        action("Stage 7 private disclosure plan", "disclosure-plan", true),
+        action("Start private disclosure draft", "disclosure-start", true),
+        action("Review private disclosure package", "disclosure-review", true),
+        action("Export reviewed package locally", "disclosure-export", true),
+        action("Private disclosure history", "disclosure-history", true),
+        action("Cancel Stage 7 contact lookup", "disclosure-cancel", true),
         action("Static analyzer status", "analyzer-status", true),
         action("HTTP/API adapter status", "api-status", true),
         action("Browser-client adapter status", "browser-status", true),
@@ -1909,6 +2299,37 @@ fn base_actions() -> Vec<ModuleMenuAction> {
         action("View source-bound campaign plan", "campaign-plan", true),
         action("Start source-bound campaign", "campaign-start", true),
         action("Status", "status", true),
+        action("Autonomous research contracts", "research", true),
+        action("Research qualification matrix", "research-qualification", true),
+        action("Autonomous research history", "research-history", true),
+        action("Inert emulation recipes", "research-recipes", true),
+        action("Reconcile capability projection", "capability-project", true),
+        action("Receipt-backed capabilities", "capabilities", true),
+        action("Capability projection history", "capability-history", true),
+        action("Build deterministic graph-v2", "graph-v2-build", true),
+        action("Inspect latest graph-v2", "graph-v2", true),
+        action("Graph-v2 history", "graph-v2-history", true),
+        action("Unresolved graph-v2 experiments", "graph-v2-experiments", true),
+        action("Stage 4 research roles", "research-roles", true),
+        action("Start bounded Stage 4 research", "research-start", true),
+        action("Stage 4 experiment frontier", "research-frontier", true),
+        action("Schedule next Stage 4 step", "research-next", true),
+        action("Pause Stage 4 research", "research-pause", true),
+        action("Resume Stage 4 research", "research-resume", true),
+        action("Cancel Stage 4 research", "research-cancel", true),
+        action("Stage 5 confirmation plan", "poc-plan", true),
+        action("Confirm chain and generate private PoC", "poc-start", true),
+        action("Private PoC history", "poc-history", true),
+        action("Stage 6 root-cause repair plan", "repair-plan", true),
+        action("Repair and adversarially regress verified PoC", "repair-start", true),
+        action("Private repair history", "repair-history", true),
+        action("Cancel Stage 6 repair", "repair-cancel", true),
+        action("Stage 7 private disclosure plan", "disclosure-plan", true),
+        action("Start private disclosure draft", "disclosure-start", true),
+        action("Review private disclosure package", "disclosure-review", true),
+        action("Export reviewed package locally", "disclosure-export", true),
+        action("Private disclosure history", "disclosure-history", true),
+        action("Cancel Stage 7 contact lookup", "disclosure-cancel", true),
         action("Static analyzer support", "analyzers", true),
         action("Install static analyzers", "analyzer-install", true),
         action("HTTP/API support", "api", true),

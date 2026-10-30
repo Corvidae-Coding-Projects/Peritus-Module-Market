@@ -2568,6 +2568,1022 @@ pub struct ModuleAttackGraphObservation {
     pub gaps: Vec<String>,
 }
 
+/// Additive autonomous-research record contract. Graph-v1 contracts remain schema one.
+pub const MODULE_RESEARCH_CONTRACT_VERSION: u16 = 2;
+
+/// Kind of an immutable identity referenced by autonomous-research records.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ModuleResearchIdentityKind {
+    /// Versioned model-role instructions and implementation.
+    RoleImplementation,
+    /// Canonical experiment request.
+    ExperimentRequest,
+    /// Exact copied target and state.
+    Target,
+    /// Exact subject, scope, and delegated authority.
+    Authority,
+    /// Exact credential-free actor, browser, process, or laboratory subject.
+    Subject,
+    /// Deterministic observation oracle.
+    Oracle,
+    /// Host- or module-authored operation receipt.
+    Receipt,
+    /// Versioned graph relation semantics.
+    GraphRelation,
+    /// Versioned proof-of-concept minimizer.
+    Minimizer,
+    /// Versioned disclosure template.
+    Template,
+    /// Private artifact bytes.
+    Artifact,
+}
+
+/// Exact immutable identity used across experiment, graph, PoC, and disclosure records.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModuleResearchIdentity {
+    /// Identity schema, currently two.
+    pub schema: u16,
+    /// Semantic identity kind.
+    pub kind: ModuleResearchIdentityKind,
+    /// Stable value within the identity kind.
+    pub value: String,
+    /// SHA-256 digest of the exact versioned identity material.
+    pub digest: String,
+}
+
+/// Sensitivity and intended audience of one retained research artifact.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ModuleResearchArtifactClassification {
+    /// Raw private experiment input or target material.
+    PrivateExperimentInput,
+    /// Raw private operation receipt.
+    PrivateReceipt,
+    /// Private graph or chain evidence.
+    PrivateGraphEvidence,
+    /// Complete vendor proof of concept.
+    PrivateVendorPoc,
+    /// Minimal local regression proof of concept.
+    MinimalRegressionPoc,
+    /// Exact copy-only patch proposed for private vendor review.
+    PrivateRepairPatch,
+    /// Complete private replay and mutation matrix for one repair.
+    PrivateRegressionEvidence,
+    /// Private responsible-disclosure package.
+    PrivateDisclosurePackage,
+    /// Sanitized draft suitable for later coordinated publication review.
+    SanitizedPublicationDraft,
+}
+
+/// Owner-only metadata for one immutable research artifact.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModuleResearchArtifactIdentity {
+    /// Record schema, currently two.
+    pub schema: u16,
+    /// Exact artifact identity and content digest.
+    pub identity: ModuleResearchIdentity,
+    /// Media type of the retained bytes.
+    pub media_type: String,
+    /// Exact retained byte count.
+    pub bytes: u64,
+    /// Sensitivity and audience classification.
+    pub classification: ModuleResearchArtifactClassification,
+    /// Module-private, root-relative artifact path.
+    pub relative_private_path: String,
+    /// Must remain true; research artifacts are never ambient or shared state.
+    pub owner_only: bool,
+}
+
+/// Provenance class of knowledge carried by an inert emulation recipe.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ModuleResearchEmulationEvidenceClass {
+    /// A publicly documented, independently confirmed incident.
+    ConfirmedIncident,
+    /// A bounded internal evaluation with retained local evidence.
+    InternalEvaluation,
+    /// A published research demonstration.
+    ResearchDemonstration,
+    /// Public guidance or a claim that has not proved the selected target vulnerable.
+    PublicClaim,
+    /// An unverified hypothesis retained only to guide future experiments.
+    Hypothesis,
+}
+
+/// One provenance entry for a non-executable emulation recipe.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModuleResearchEmulationProvenance {
+    /// Stable source kind, such as `official_testing_guide`.
+    pub kind: String,
+    /// Canonical public HTTPS reference.
+    pub url: String,
+    /// Calendar date on which the reference was selected for this recipe.
+    pub retrieved_on: String,
+}
+
+/// Versioned inert public-knowledge recipe that may guide, but never prove, an experiment.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModuleResearchEmulationRecipe {
+    /// Record schema, currently two.
+    pub schema: u16,
+    /// Stable recipe identity.
+    pub id: String,
+    /// Exact recipe version.
+    pub version: String,
+    /// Human-readable recipe title.
+    pub title: String,
+    /// SHA-256 digest of the exact embedded recipe document.
+    pub record_digest: String,
+    /// Public source provenance; no source content is fetched during proof.
+    pub provenance: Vec<ModuleResearchEmulationProvenance>,
+    /// SPDX identifier for the referenced source material.
+    pub license: String,
+    /// Evidence class retained without promotion.
+    pub evidence_class: ModuleResearchEmulationEvidenceClass,
+    /// Attacker access assumed by the source material.
+    pub attacker_access: Vec<String>,
+    /// Bounded roles and tool classes described by the recipe.
+    pub tools_and_roles: Vec<String>,
+    /// Preconditions that must be established independently on the selected target.
+    pub prerequisites: Vec<String>,
+    /// Publicly claimed or demonstrated primitives, never admitted as local facts.
+    pub observed_or_claimed_primitives: Vec<String>,
+    /// Harmless private-laboratory substitutions used by Peritus.
+    pub harmless_laboratory_equivalents: Vec<String>,
+    /// Closed registered adapter operations capable of testing the claims.
+    pub adapter_mappings: Vec<String>,
+    /// Unsafe, external, or unsupported behavior that must not be reproduced.
+    pub unsafe_or_unsupported_gaps: Vec<String>,
+    /// Optional user-supplied coordination metadata; bundled recipes leave it absent.
+    pub user_embargo_metadata: Option<String>,
+    /// Must remain false: public recipe documents never carry executable incident content.
+    pub executable_content: bool,
+}
+
+/// Durable phase of one bounded autonomous experiment.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ModuleResearchExperimentPhase {
+    /// Proposed but not yet validated.
+    Proposed,
+    /// Deterministically admitted for future execution.
+    Admitted,
+    /// Currently executing one bounded operation.
+    Running,
+    /// Completed with retained observations.
+    Observed,
+    /// Rejected by deterministic admission.
+    Rejected,
+    /// Blocked by authority, resource, or capability limits.
+    Blocked,
+    /// Cancelled with cleanup evidence.
+    Cancelled,
+    /// Failed without establishing a capability.
+    Failed,
+    /// Replaced by a newer immutable experiment.
+    Superseded,
+}
+
+/// Immutable specification and disposition of one bounded experiment.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModuleResearchExperimentRecord {
+    /// Record schema, currently two.
+    pub schema: u16,
+    /// Stable experiment identity.
+    pub id: String,
+    /// Exact canonical experiment request.
+    pub request: ModuleResearchIdentity,
+    /// Exact role implementation that proposed the request.
+    pub role_implementation: ModuleResearchIdentity,
+    /// Exact copied target and state.
+    pub target: ModuleResearchIdentity,
+    /// Exact authority available to the operation.
+    pub authority: ModuleResearchIdentity,
+    /// Exact deterministic result oracle.
+    pub oracle: ModuleResearchIdentity,
+    /// Registered adapter family and operation.
+    pub adapter_operation: String,
+    /// Single input dimension changed by this experiment.
+    pub changed_dimension: String,
+    /// Current durable phase.
+    pub phase: ModuleResearchExperimentPhase,
+    /// Exact receipts, in observation order.
+    pub receipts: Vec<ModuleResearchIdentity>,
+    /// Owner-only artifacts retained by the experiment.
+    pub artifacts: Vec<ModuleResearchArtifactIdentity>,
+    /// Factual rejection, failure, or coverage limitations.
+    pub limitations: Vec<String>,
+}
+
+/// Deterministic disposition of one projected or experimentally observed capability.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ModuleResearchCapabilityDisposition {
+    /// Projected from an existing trusted adapter receipt.
+    Projected,
+    /// Admitted from a bounded experiment and deterministic oracle.
+    Admitted,
+    /// Rejected because evidence or continuity was insufficient.
+    Rejected,
+    /// Blocked by an explicit unsupported prerequisite.
+    Blocked,
+    /// Replaced without rewriting the prior record.
+    Superseded,
+}
+
+/// Closed vocabulary for receipt-backed capability primitives.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ModuleResearchCapabilityKind {
+    /// A deterministic source-only weakness lead.
+    SourceWeakness,
+    /// Untrusted input crossed an interpretation boundary.
+    InputInterpretationViolation,
+    /// Runtime behavior disclosed protected information.
+    SensitiveDataDisclosure,
+    /// Runtime behavior performed an application action without the required authority.
+    UnauthorizedApplicationAction,
+    /// A browser executed attacker-controlled script.
+    ClientScriptExecution,
+    /// A browser-visible security policy was missing or bypassed.
+    ClientPolicyViolation,
+    /// A browser performed a prohibited cross-origin action.
+    CrossOriginAction,
+    /// Authentication requirements were bypassed.
+    AuthenticationBypass,
+    /// Application authorization or object ownership was bypassed.
+    AuthorizationBypass,
+    /// A tenant isolation boundary was crossed.
+    TenancyBoundaryCrossing,
+    /// A session lifecycle property was violated.
+    SessionLifecycleViolation,
+    /// A file, archive, path, permission, or temporary-file boundary was crossed.
+    FileBoundaryViolation,
+    /// A parser or native child produced an oracle-bound fault.
+    ParserFault,
+    /// A documented workflow or state invariant was violated.
+    WorkflowInvariantViolation,
+    /// A private-network destination boundary was violated.
+    PrivateNetworkBoundaryViolation,
+    /// A TLS identity, freshness, downgrade, or connection-state boundary was violated.
+    TlsBoundaryViolation,
+    /// A declared privilege or local policy boundary was violated.
+    PrivilegeBoundaryViolation,
+    /// Delegated application authority exceeded the caller's scope.
+    DelegatedAuthorityViolation,
+    /// No Stage 2 capability kind safely represents the observation.
+    Unsupported,
+}
+
+/// Evidence boundary inherited from the class-specific adapter oracle.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ModuleResearchEvidenceBoundary {
+    /// Deterministic source evidence that remains a lead.
+    SourceLead,
+    /// A runtime receipt and adapter oracle confirmed the target effect.
+    RuntimeConfirmed,
+    /// The candidate was rejected and cannot be used as evidence.
+    Untrusted,
+}
+
+/// Semantic kind of one typed capability prerequisite or produced fact.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ModuleResearchCapabilityFactKind {
+    /// Immutable selected source snapshot.
+    SourceSnapshot,
+    /// Exact disposable laboratory identity.
+    Laboratory,
+    /// Source path, route, operation, or other entry point.
+    EntryPoint,
+    /// Credential-free subject identity.
+    Subject,
+    /// Authority held before or after the primitive.
+    Authority,
+    /// Host-observed copied-target state.
+    TargetState,
+    /// Exact bounded input or replay identity.
+    Input,
+    /// Browser-observed effect.
+    BrowserEffect,
+    /// Documented security property or invariant.
+    SecurityProperty,
+    /// Pinned deterministic oracle identity.
+    Oracle,
+}
+
+/// Typed content-bound fact consumed or produced by a capability primitive.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModuleResearchCapabilityFact {
+    /// Record schema, currently two.
+    pub schema: u16,
+    /// Semantic fact kind.
+    pub kind: ModuleResearchCapabilityFactKind,
+    /// Stable redacted value.
+    pub value: String,
+    /// SHA-256 digest of the exact versioned fact material.
+    pub digest: String,
+}
+
+/// Stable reason an observation could not become a capability primitive.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ModuleResearchProjectionRejection {
+    /// The retained observation no longer names the active source target.
+    MissingTargetContinuity,
+    /// No matching historically ready laboratory identity exists.
+    StaleLaboratoryIdentity,
+    /// The observation's credential-free subject and authority are incompatible.
+    IncompatibleSubjectAuthority,
+    /// The class-specific evidence record or oracle proof is absent or invalid.
+    InsufficientOracleEvidence,
+    /// The closed Stage 2 vocabulary does not safely classify the observation.
+    UnsupportedCapabilityKind,
+}
+
+/// One receipt-backed capability primitive available to graph-v2 search.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModuleResearchCapabilityRecord {
+    /// Record schema, currently two.
+    pub schema: u16,
+    /// Stable primitive identity.
+    pub id: String,
+    /// Registered class-specific adapter family.
+    pub adapter_id: String,
+    /// Exact adapter implementation identity from the observation.
+    pub adapter_version: String,
+    /// Exact deterministic projection implementation identity.
+    pub projection_version: String,
+    /// Exact copied target and state.
+    pub target: ModuleResearchIdentity,
+    /// Exact credential-free subject of the primitive.
+    pub subject: ModuleResearchIdentity,
+    /// Authority before the primitive.
+    pub authority_before: ModuleResearchIdentity,
+    /// Authority after the primitive.
+    pub authority_after: ModuleResearchIdentity,
+    /// Versioned primitive kind.
+    pub capability: ModuleResearchCapabilityKind,
+    /// Typed prerequisites consumed by the primitive.
+    pub consumes: Vec<ModuleResearchCapabilityFact>,
+    /// Typed facts and capabilities produced by the primitive.
+    pub produces: Vec<ModuleResearchCapabilityFact>,
+    /// Evidence grade inherited unchanged from the adapter oracle.
+    pub evidence_boundary: ModuleResearchEvidenceBoundary,
+    /// Exact deterministic oracle.
+    pub oracle: ModuleResearchIdentity,
+    /// Exact supporting receipts.
+    pub receipts: Vec<ModuleResearchIdentity>,
+    /// Projection or experiment identity that created this record.
+    pub source_record: String,
+    /// Deterministic evidence disposition.
+    pub disposition: ModuleResearchCapabilityDisposition,
+    /// Stable rejection reason, present only for rejected candidates.
+    pub rejection_reason: Option<ModuleResearchProjectionRejection>,
+    /// Factual admission or rejection detail.
+    pub detail: String,
+}
+
+/// Role of one node in the additive graph-v2 contract.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ModuleResearchGraphNodeKind {
+    /// Attacker-controlled application entry point.
+    EntryPoint,
+    /// Necessary prerequisite.
+    Prerequisite,
+    /// Receipt-backed capability primitive.
+    Capability,
+    /// Observed copied-target state effect.
+    StateEffect,
+    /// Observed authority transition.
+    AuthorityTransition,
+    /// Demonstrated security impact.
+    Impact,
+}
+
+/// One immutable graph-v2 node.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModuleResearchGraphNodeRecord {
+    /// Stable node identity.
+    pub id: String,
+    /// Graph role.
+    pub kind: ModuleResearchGraphNodeKind,
+    /// Exact copied target and state.
+    pub target: ModuleResearchIdentity,
+    /// Referenced capability identity, when applicable.
+    pub capability_id: Option<String>,
+    /// Factual redacted label.
+    pub label: String,
+}
+
+/// Deterministic disposition of one proposed graph-v2 edge.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ModuleResearchGraphEdgeDisposition {
+    /// A relation was proposed but has not passed deterministic compatibility checks.
+    Proposed,
+    /// Exact evidence supports the relation.
+    Supported,
+    /// A legal experiment could resolve the relation.
+    Unresolved,
+    /// Deterministic continuity or evidence checks rejected the relation.
+    Rejected,
+    /// A removed prerequisite broke the relation.
+    Broken,
+    /// Authority or capability limits prevent evaluation.
+    Blocked,
+    /// A newer immutable edge supersedes this one.
+    Superseded,
+}
+
+/// Stable reason a proposed graph-v2 relation was rejected.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ModuleResearchGraphRejection {
+    /// The two primitives belong to different immutable source snapshots.
+    CrossTarget,
+    /// Runtime primitives do not share the exact disposable laboratory continuity.
+    StaleTargetState,
+    /// The subject transition is not allowed by the versioned relation.
+    IncompatibleSubject,
+    /// The producer cannot supply the consumer's required authority.
+    IncompatibleAuthority,
+    /// The producer capability or typed facts cannot satisfy the consumer.
+    IncompatibleCapability,
+    /// Observation order was the only apparent relationship.
+    TemporalOnly,
+    /// The proposed relation lacks exact admitted primitive receipts.
+    InsufficientEvidence,
+    /// A cycle lacked an explicit state transition or exceeded the cycle bound.
+    UnsupportedCycle,
+    /// Configured graph or frontier bounds prevented admission.
+    SearchBoundExceeded,
+}
+
+/// One graph-v2 edge with exact relation and evidence identities.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModuleResearchGraphEdgeRecord {
+    /// Stable edge identity.
+    pub id: String,
+    /// Existing source node.
+    pub from: String,
+    /// Existing destination node.
+    pub to: String,
+    /// Exact versioned relation semantics.
+    pub relation: ModuleResearchIdentity,
+    /// Exact supporting receipts.
+    pub receipts: Vec<ModuleResearchIdentity>,
+    /// Current deterministic disposition.
+    pub disposition: ModuleResearchGraphEdgeDisposition,
+    /// Stable rejection reason, present only for rejected relations.
+    pub rejection_reason: Option<ModuleResearchGraphRejection>,
+    /// Factual disposition detail.
+    pub detail: String,
+}
+
+/// Hard deterministic limits for one graph-v2 build and chain search.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModuleResearchSearchBounds {
+    /// Maximum retained graph nodes.
+    pub maximum_nodes: u32,
+    /// Maximum retained graph edges, including explicit rejections.
+    pub maximum_edges: u32,
+    /// Maximum number of capability nodes in one candidate chain.
+    pub maximum_depth: u16,
+    /// Maximum open paths retained by the frontier.
+    pub maximum_open_candidates: u32,
+    /// Maximum explicit state-transition cycles in one candidate.
+    pub maximum_cycles: u16,
+    /// Maximum deterministic unit cost of one candidate.
+    pub maximum_cost: u32,
+}
+
+/// Bounded experiment specification emitted for one legal unresolved relation.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModuleResearchExperimentSpecification {
+    /// Record schema, currently two.
+    pub schema: u16,
+    /// Stable specification identity.
+    pub id: String,
+    /// Exact copied target and state.
+    pub target: ModuleResearchIdentity,
+    /// Producer primitive identity.
+    pub from_capability: String,
+    /// Consumer primitive identity.
+    pub to_capability: String,
+    /// Versioned relation the experiment would resolve.
+    pub relation: ModuleResearchIdentity,
+    /// Existing registered adapter operation required for execution.
+    pub adapter_operation: String,
+    /// Single state, identity, input, or authority dimension to vary.
+    pub changed_dimension: String,
+    /// Capability sought from the bounded experiment.
+    pub required_capability: ModuleResearchCapabilityKind,
+    /// Exact deterministic oracle required for later admission.
+    pub oracle: ModuleResearchIdentity,
+    /// Hard operation ceiling for the future experiment.
+    pub maximum_operations: u32,
+    /// Factual reason the experiment remains unresolved.
+    pub detail: String,
+}
+
+/// Factual accounting for one bounded deterministic graph search.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModuleResearchSearchSummary {
+    /// Admitted primitives considered by the builder.
+    pub capabilities_considered: u32,
+    /// Ordered primitive pairs evaluated for compatibility.
+    pub pairs_considered: u64,
+    /// Legal candidate paths expanded by the frontier.
+    pub candidates_expanded: u32,
+    /// Candidate cycles rejected by deterministic rules.
+    pub cycles_rejected: u32,
+    /// Whether any configured bound prevented complete enumeration.
+    pub truncated: bool,
+}
+
+/// Disposition of one bounded graph-v2 chain candidate.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ModuleResearchChainDisposition {
+    /// Search has not resolved every edge.
+    Candidate,
+    /// Every necessary edge is supported.
+    Confirmed,
+    /// A counterfactual removed a necessary prerequisite.
+    Broken,
+    /// At least one edge was rejected.
+    Rejected,
+    /// Search bounds or authority prevent completion.
+    Blocked,
+    /// A newer immutable chain supersedes this one.
+    Superseded,
+}
+
+/// One exact ordered graph-v2 chain candidate.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModuleResearchChainRecord {
+    /// Stable chain identity.
+    pub id: String,
+    /// Ordered node identities.
+    pub nodes: Vec<String>,
+    /// Ordered edge identities.
+    pub edges: Vec<String>,
+    /// Demonstrated or sought terminal capability.
+    pub goal: ModuleResearchCapabilityKind,
+    /// Deterministic unit cost under the graph builder's versioned cost model.
+    pub cost: u32,
+    /// Unscheduled experiment specifications required to resolve this path.
+    pub missing_experiments: Vec<String>,
+    /// Distinct adapter families represented by the ordered capability path.
+    pub adapter_families: Vec<String>,
+    /// Current deterministic disposition.
+    pub disposition: ModuleResearchChainDisposition,
+    /// Exact replay receipt when a later stage independently executes this chain.
+    pub replay: Option<ModuleResearchIdentity>,
+    /// Factual disposition detail.
+    pub detail: String,
+}
+
+/// Additive graph-v2 record; it does not alter or replace graph-v1 observations.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModuleResearchGraphRecord {
+    /// Record schema, currently two.
+    pub schema: u16,
+    /// Stable graph identity.
+    pub id: String,
+    /// Exact copied target and state.
+    pub target: ModuleResearchIdentity,
+    /// Versioned graph-builder implementation.
+    pub builder: ModuleResearchIdentity,
+    /// Hard limits applied to this exact graph build.
+    pub bounds: ModuleResearchSearchBounds,
+    /// Capability identities deliberately removed for a counterfactual build.
+    pub excluded_capabilities: Vec<String>,
+    /// Immutable nodes.
+    pub nodes: Vec<ModuleResearchGraphNodeRecord>,
+    /// Supported, unresolved, rejected, and broken edges.
+    pub edges: Vec<ModuleResearchGraphEdgeRecord>,
+    /// Bounded chain-search results.
+    pub chains: Vec<ModuleResearchChainRecord>,
+    /// Unscheduled bounded experiments for legal unresolved edges.
+    pub experiments: Vec<ModuleResearchExperimentSpecification>,
+    /// Deterministic frontier and truncation accounting.
+    pub summary: ModuleResearchSearchSummary,
+    /// Explicit search and generalization gaps.
+    pub gaps: Vec<String>,
+}
+
+/// Durable state of a safe laboratory-only proof-of-concept bundle.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ModuleResearchPocState {
+    /// Declared but not yet generated.
+    Planned,
+    /// Generation was blocked by safety or determinism requirements.
+    Blocked,
+    /// Generated but not independently replayed.
+    Generated,
+    /// Replayed successfully in a fresh disposable environment.
+    Verified,
+    /// Replaced without rewriting prior evidence.
+    Superseded,
+}
+
+/// Manifest for one private vendor or minimal regression proof of concept.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModuleResearchPocBundle {
+    /// Record schema, currently two.
+    pub schema: u16,
+    /// Stable bundle identity.
+    pub id: String,
+    /// Confirmed chain reproduced by the bundle.
+    pub chain_id: String,
+    /// Exact versioned minimizer implementation.
+    pub minimizer: ModuleResearchIdentity,
+    /// Current durable state.
+    pub state: ModuleResearchPocState,
+    /// Owner-only artifacts in the bundle.
+    pub artifacts: Vec<ModuleResearchArtifactIdentity>,
+    /// Exact replay receipt, when verified.
+    pub replay: Option<ModuleResearchIdentity>,
+    /// Explicit safety, portability, and coverage limits.
+    pub limitations: Vec<String>,
+}
+
+/// Exact Stage 5 request for fresh chain replay and private PoC verification.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModuleResearchChainConfirmationRequest {
+    /// Request schema, currently two.
+    pub schema: u16,
+    /// Immutable graph-v2 identity selected by the coordinator.
+    pub graph_id: String,
+    /// Supported candidate chain selected from that graph.
+    pub chain_id: String,
+    /// Durable planned PoC bundle identity.
+    pub bundle_id: String,
+    /// Immutable copied-source snapshot.
+    pub source_snapshot: String,
+    /// Exact revocable scoped-source authority copied into the bounded worker.
+    pub source: ScopedSourceAuthority,
+    /// Ready vulnerable laboratory identity and endpoint.
+    pub vulnerable_laboratory_id: String,
+    pub vulnerable_endpoint_handle: String,
+    /// Ready safe-twin laboratory identity and endpoint.
+    pub safe_laboratory_id: String,
+    pub safe_endpoint_handle: String,
+    /// Registered confirmation profile.
+    pub profile: String,
+    /// Literal private destination accepted by the standalone PoC.
+    pub destination: String,
+    /// Literal synthetic credential-free subject accepted by the PoC.
+    pub synthetic_identity: String,
+    /// Hard operation and artifact bounds.
+    pub maximum_browser_actions: u32,
+    pub maximum_requests: u32,
+    pub maximum_artifact_bytes: u64,
+}
+
+/// Exact copied target accepted by a standalone Stage 5 PoC replay.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModuleResearchPocTargetIdentity {
+    pub application_path: String,
+    pub application_digest: String,
+    pub service_path: String,
+    pub service_digest: String,
+    pub target_identity: String,
+}
+
+/// Result of independently executing the minimized PoC in one fresh disposable target.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModuleResearchPocReplayObservation {
+    pub schema: u16,
+    pub target: ModuleResearchPocTargetIdentity,
+    pub expected_signal: bool,
+    pub observed_signal: bool,
+    pub browser_identity: String,
+    pub traffic_digest: String,
+    pub requests_observed: u64,
+    pub actions_executed: u64,
+    pub off_scope_requests_blocked: u64,
+    pub cleanup_complete: bool,
+    pub original_source_unchanged: bool,
+    pub result_digest: String,
+}
+
+/// Fresh full-chain, counterfactual, skeptic, and standalone-PoC Stage 5 evidence.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModuleResearchChainConfirmationObservation {
+    pub schema: u16,
+    pub graph_id: String,
+    pub chain_id: String,
+    pub bundle_id: String,
+    pub source_snapshot: String,
+    pub minimizer_version: String,
+    pub poc_script_digest: String,
+    pub full_replay: ModuleAttackGraphObservation,
+    pub vulnerable_poc: ModuleResearchPocReplayObservation,
+    pub safe_poc: ModuleResearchPocReplayObservation,
+    pub verification_digest: String,
+    pub limitations: Vec<String>,
+}
+
+/// Durable state of one Stage 6 copy-only root-cause repair.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ModuleResearchRepairState {
+    /// Declared but not yet executed in a disposable worker.
+    Planned,
+    /// Execution was blocked before a complete replay could be admitted.
+    Blocked,
+    /// Patch and regression evidence passed, but the original workspace is not yet reverified.
+    Replayed,
+    /// Patch, regression, review, cleanup, and original-workspace verification all passed.
+    Verified,
+    /// Complete evidence exists, but independent review or original-workspace verification failed.
+    Rejected,
+    /// Replaced without rewriting prior repair evidence.
+    Superseded,
+}
+
+/// Exact source preimage and copy-only patch identity selected for Stage 6.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModuleResearchPatchIdentity {
+    pub target_path: String,
+    pub original_digest: String,
+    pub patched_digest: String,
+    pub patch_digest: String,
+    pub diff_digest: String,
+    pub root_cause_group: String,
+    pub earliest_prerequisite: String,
+}
+
+/// One bounded repair-regression category.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Ord, PartialOrd, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ModuleResearchRegressionCategory {
+    MinimizedPoc,
+    FullChain,
+    Counterfactual,
+    SupportingAdapter,
+    Legitimate,
+    Malformed,
+    Adjacent,
+    Mutation,
+    SafetyControl,
+}
+
+/// One independently observable repair replay or mutation result.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModuleResearchRegressionCase {
+    pub id: String,
+    pub category: ModuleResearchRegressionCategory,
+    pub dimension: String,
+    pub expected: String,
+    pub observed: String,
+    pub passed: bool,
+    pub evidence_digest: String,
+}
+
+/// A deliberately invalid repair strategy rejected by the independent reviewer.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModuleResearchPatchRejection {
+    pub strategy: String,
+    pub rejected: bool,
+    pub reason: String,
+}
+
+/// Independent Stage 6 review over the exact diff and complete replay matrix.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModuleResearchPatchReview {
+    pub reviewer: String,
+    pub accepted: bool,
+    pub exact_preimage: bool,
+    pub root_cause_repaired: bool,
+    pub legitimate_behavior_preserved: bool,
+    pub oracle_preserved: bool,
+    pub target_preserved: bool,
+    pub complete_matrix: bool,
+    pub rejected_strategies: Vec<ModuleResearchPatchRejection>,
+    pub detail: String,
+}
+
+/// Durable private patch and regression bundle produced by Stage 6.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModuleResearchRepairBundle {
+    pub schema: u16,
+    pub id: String,
+    pub chain_id: String,
+    pub poc_bundle_id: String,
+    pub source_snapshot: String,
+    pub state: ModuleResearchRepairState,
+    pub patch: Option<ModuleResearchPatchIdentity>,
+    pub artifacts: Vec<ModuleResearchArtifactIdentity>,
+    pub replay: Option<ModuleResearchIdentity>,
+    pub review: Option<ModuleResearchPatchReview>,
+    pub original_verification: Option<ScopedSourceVerification>,
+    pub limitations: Vec<String>,
+}
+
+/// Exact Stage 6 request bound to one verified Stage 5 PoC bundle.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModuleResearchRepairRequest {
+    pub schema: u16,
+    pub graph_id: String,
+    pub chain_id: String,
+    pub poc_bundle_id: String,
+    pub repair_bundle_id: String,
+    pub source_snapshot: String,
+    pub source: ScopedSourceAuthority,
+    pub vulnerable_laboratory_id: String,
+    pub vulnerable_endpoint_handle: String,
+    pub profile: String,
+    pub destination: String,
+    pub synthetic_identity: String,
+    pub maximum_browser_actions: u32,
+    pub maximum_requests: u32,
+    pub maximum_mutations: u32,
+    pub maximum_artifact_bytes: u64,
+}
+
+/// Raw result emitted by the real-browser Stage 6 mutation driver.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModuleResearchRegressionObservation {
+    pub schema: u16,
+    pub browser_identity: String,
+    pub cases: Vec<ModuleResearchRegressionCase>,
+    pub actions_executed: u64,
+    pub requests_observed: u64,
+    pub off_scope_requests_blocked: u64,
+    pub browser_cleanup_complete: bool,
+    pub traffic_digest: String,
+    pub result_digest: String,
+}
+
+/// Fresh patched-twin, PoC, full-chain, mutation, review, and cleanup Stage 6 evidence.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModuleResearchRepairObservation {
+    pub schema: u16,
+    pub graph_id: String,
+    pub chain_id: String,
+    pub poc_bundle_id: String,
+    pub repair_bundle_id: String,
+    pub source_snapshot: String,
+    pub profile: String,
+    pub patched_laboratory_id: String,
+    pub patch: ModuleResearchPatchIdentity,
+    pub diff_bytes: Vec<u8>,
+    pub full_replay: ModuleAttackGraphObservation,
+    pub patched_poc: ModuleResearchPocReplayObservation,
+    pub regression: ModuleResearchRegressionObservation,
+    pub matrix: Vec<ModuleResearchRegressionCase>,
+    pub review: ModuleResearchPatchReview,
+    pub regression_script_digest: String,
+    pub cleanup_complete: bool,
+    pub original_source_unchanged: bool,
+    pub verification_digest: String,
+    pub limitations: Vec<String>,
+}
+
+/// Responsible-disclosure timeline state. The module may autonomously reach only `Exported`.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ModuleResearchDisclosureState {
+    /// Private draft exists.
+    Draft,
+    /// Private package passed module review.
+    PackageReviewed,
+    /// Package awaits explicit user authorization for any later transport.
+    AwaitingUserAuthorization,
+    /// Private files were exported locally; no message was sent.
+    Exported,
+    /// Separately authorized submission was recorded as a user fact.
+    Submitted,
+    /// Vendor acknowledgement was recorded as a user fact.
+    Acknowledged,
+    /// Remediation is in progress.
+    RemediationInProgress,
+    /// Candidate fix was received.
+    FixReceived,
+    /// Candidate fix was independently verified.
+    FixVerified,
+    /// Coordinated release is planned.
+    CoordinatedRelease,
+    /// Coordinated public disclosure occurred.
+    PubliclyDisclosed,
+    /// Vendor marked the report duplicate.
+    Duplicate,
+    /// Vendor marked the product not affected.
+    NotAffected,
+    /// Vendor did not respond within the recorded policy.
+    VendorUnresponsive,
+    /// Embargo was explicitly extended.
+    EmbargoExtended,
+}
+
+/// One immutable responsible-disclosure timeline transition.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModuleResearchDisclosureTimelineEntry {
+    /// Monotonic sequence within the package.
+    pub sequence: u32,
+    /// Resulting state.
+    pub state: ModuleResearchDisclosureState,
+    /// RFC 3339 time supplied by an authorized host or user, when known.
+    pub occurred_at: Option<String>,
+    /// Exact supporting receipt for externally sourced facts.
+    pub receipt: Option<ModuleResearchIdentity>,
+    /// Factual transition detail.
+    pub detail: String,
+}
+
+/// Exact source-scoped security-contact fact used by one private disclosure package.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModuleResearchDisclosureContact {
+    /// Canonical source-relative SECURITY.md path.
+    pub path: String,
+    /// Complete source-file digest returned by the scoped-source broker.
+    pub source_digest: String,
+    /// Content digest of the exact complete range used for extraction.
+    pub range_artifact: String,
+    /// Exact mailto recipient extracted from source, when present.
+    pub recipient: Option<String>,
+    /// Exact HTTPS policy URL extracted from source, when present.
+    pub policy_url: Option<String>,
+    /// Exact bounded SECURITY.md line containing the retained contact fact.
+    #[serde(default)]
+    pub source_excerpt: Option<String>,
+    /// Receipt identity binding the path and exact source bytes.
+    pub provenance: ModuleResearchIdentity,
+}
+
+/// Private responsible-disclosure package. This contract provides no delivery operation.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModuleResearchDisclosurePackage {
+    /// Record schema, currently two.
+    pub schema: u16,
+    /// Stable package identity.
+    pub id: String,
+    /// Confirmed chain described by the package.
+    pub chain_id: String,
+    /// Verified private PoC bundle, when available.
+    pub poc_bundle_id: Option<String>,
+    /// Verified Stage 6 repair bundle used for fix evidence.
+    pub repair_bundle_id: String,
+    /// Exact immutable source snapshot described by the package.
+    pub source_snapshot: String,
+    /// Exact versioned rendering template.
+    pub template: ModuleResearchIdentity,
+    /// Digest of the canonical advisory JSON projection.
+    pub advisory_digest: String,
+    /// Optional exact SECURITY.md contact fact; absence remains an explicit placeholder.
+    pub contact: Option<ModuleResearchDisclosureContact>,
+    /// Deterministic review receipt over every private and sanitized projection.
+    pub redaction_review: Option<ModuleResearchIdentity>,
+    /// Deterministic proof that this package exposes no delivery operation.
+    pub no_delivery_proof: Option<ModuleResearchIdentity>,
+    /// Current local timeline state.
+    pub state: ModuleResearchDisclosureState,
+    /// Immutable transition history.
+    pub timeline: Vec<ModuleResearchDisclosureTimelineEntry>,
+    /// Owner-only package artifacts.
+    pub artifacts: Vec<ModuleResearchArtifactIdentity>,
+    /// Missing contacts, policy, legal decisions, or dates.
+    pub placeholders: Vec<String>,
+}
+
 /// One exact application shape supported by the host-owned laboratory controller.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]

@@ -17,6 +17,7 @@ separate user action.
 | --- | --- |
 | [Cargo.toml](Cargo.toml) | Rust package and source-only dependencies, including the module-private contract SDK. |
 | [module.toml.in](module.toml.in) | Source-build template rendered by Peritus's generic package builder. |
+| [QUALIFICATION.md](QUALIFICATION.md) | Stage 8 supported-profile matrix, acceptance boundary, and explicit residual gaps exposed read-only by the module. |
 | [README.md](README.md) | Installation, operation, evidence interpretation, exports, troubleshooting, and safety guide. |
 | [REAL_TESTING.md](REAL_TESTING.md) | Reproducible real-interface evidence for generic and application-specific runtime campaigns. |
 | [corpus](corpus/AGENTS.md) | Licensed vulnerable/safe executable pairs and adversarial interface controls. |
